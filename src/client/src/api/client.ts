@@ -1,0 +1,128 @@
+import type {
+  Entry, ActionExecutionResult, DashboardStats, EntryUpdateRequest,
+  BatchResult, EntryTemplate, EntryFilters,
+} from '../types';
+
+const API_BASE = '/api';
+
+async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+  });
+  if (!res.ok) {
+    const errorBody = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}: ${errorBody || res.statusText}`);
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json();
+}
+
+export const api = {
+  // --- Entries ---
+
+  getEntries: (filters?: EntryFilters) => {
+    const params = new URLSearchParams();
+    if (filters?.type) params.set('type', filters.type);
+    if (filters?.severity) params.set('severity', filters.severity);
+    if (filters?.source) params.set('source', filters.source);
+    if (filters?.tags) params.set('tags', filters.tags);
+    if (filters?.search) params.set('search', filters.search);
+    const qs = params.toString();
+    return fetchJson<Entry[]>(`${API_BASE}/entries${qs ? `?${qs}` : ''}`);
+  },
+
+  getEntry: (id: string) =>
+    fetchJson<Entry>(`${API_BASE}/entries/${id}`),
+
+  updateEntry: (id: string, update: EntryUpdateRequest) =>
+    fetchJson<Entry>(`${API_BASE}/entries/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(update),
+    }),
+
+  executeAction: (entryId: string, actionIndex: number) =>
+    fetchJson<ActionExecutionResult>(`${API_BASE}/entries/${entryId}/actions/${actionIndex}`, {
+      method: 'POST',
+    }),
+
+  executeSectionAction: (entryId: string, sectionIndex: number, actionIndex: number) =>
+    fetchJson<ActionExecutionResult>(
+      `${API_BASE}/entries/${entryId}/sections/${sectionIndex}/actions/${actionIndex}`,
+      { method: 'POST' }
+    ),
+
+  dismissEntry: (id: string) =>
+    fetchJson<Entry>(`${API_BASE}/entries/${id}/dismiss`, { method: 'POST' }),
+
+  deleteEntry: (id: string) =>
+    fetchJson<void>(`${API_BASE}/entries/${id}`, { method: 'DELETE' }),
+
+  pinEntry: (id: string) =>
+    fetchJson<Entry>(`${API_BASE}/entries/${id}/pin`, { method: 'POST' }),
+
+  undoEntry: (id: string) =>
+    fetchJson<Entry>(`${API_BASE}/entries/${id}/undo`, { method: 'POST' }),
+
+  // --- Batch operations ---
+
+  batchDismiss: (ids: string[]) =>
+    fetchJson<BatchResult>(`${API_BASE}/entries/batch/dismiss`, {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+
+  batchDelete: (ids: string[]) =>
+    fetchJson<BatchResult>(`${API_BASE}/entries/batch/delete`, {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+
+  batchAction: (ids: string[], actionLabel: string) =>
+    fetchJson<BatchResult>(`${API_BASE}/entries/batch/action`, {
+      method: 'POST',
+      body: JSON.stringify({ ids, actionLabel }),
+    }),
+
+  // --- History ---
+
+  getHistory: (filters?: EntryFilters, limit = 50, offset = 0) => {
+    const params = new URLSearchParams();
+    if (filters?.type) params.set('type', filters.type);
+    if (filters?.severity) params.set('severity', filters.severity);
+    if (filters?.source) params.set('source', filters.source);
+    if (filters?.tags) params.set('tags', filters.tags);
+    if (filters?.search) params.set('search', filters.search);
+    params.set('limit', limit.toString());
+    params.set('offset', offset.toString());
+    return fetchJson<Entry[]>(`${API_BASE}/history?${params}`);
+  },
+
+  getHistoryEntry: (id: string) =>
+    fetchJson<Entry>(`${API_BASE}/history/${id}`),
+
+  // --- Stats ---
+
+  getStats: () =>
+    fetchJson<DashboardStats>(`${API_BASE}/stats`),
+
+  // --- Templates ---
+
+  getTemplates: () =>
+    fetchJson<EntryTemplate[]>(`${API_BASE}/templates`),
+
+  getTemplate: (type: string) =>
+    fetchJson<EntryTemplate>(`${API_BASE}/templates/${type}`),
+
+  createTemplate: (template: EntryTemplate) =>
+    fetchJson<EntryTemplate>(`${API_BASE}/templates`, {
+      method: 'POST',
+      body: JSON.stringify(template),
+    }),
+
+  deleteTemplate: (type: string) =>
+    fetchJson<void>(`${API_BASE}/templates/${type}`, { method: 'DELETE' }),
+};

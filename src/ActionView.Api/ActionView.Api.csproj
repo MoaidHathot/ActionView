@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\ActionView.Core\ActionView.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.0-preview.4.25258.110" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PackAsTool>true</PackAsTool>
+    <IsPackable>true</IsPackable>
+    <ToolCommandName>actionview-server</ToolCommandName>
+    <PackageId>ActionView.Api</PackageId>
+    <Description>ActionView web server and review dashboard</Description>
+    <Authors>ActionView</Authors>
+    <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
+  </PropertyGroup>
+
+  <!--
+    Embed the pre-built client files (produced by "npm run build" in src/client).
+    The Link metadata maps them under wwwroot/ so ManifestEmbeddedFileProvider
+    can serve them with the correct relative paths.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\client\dist\**">
+      <Link>wwwroot\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

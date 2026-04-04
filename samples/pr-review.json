@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "1",
+  "type": "pr-review",
+  "source": "github-orchestrator",
+  "title": "PR #482: Add user preference caching layer",
+  "subtitle": "repo: acme/backend — opened by @danielk",
+  "severity": "medium",
+  "icon": "git-pull-request",
+  "tags": ["backend", "performance", "caching"],
+  "content": [
+    {
+      "type": "keyValue",
+      "label": "Pull Request Details",
+      "pairs": {
+        "Repository": "acme/backend",
+        "Branch": "feature/user-pref-cache → main",
+        "Author": "@danielk",
+        "Files Changed": "7",
+        "Lines": "+184 / -23"
+      }
+    },
+    {
+      "type": "markdown",
+      "body": "## Summary\n\nThis PR introduces a Redis-backed caching layer for user preferences. Currently, every API request that needs user preferences makes a database round-trip. This change caches preferences with a 5-minute TTL, reducing p95 latency on the `/api/settings` endpoint from ~120ms to ~15ms.\n\n### AI Analysis\n\n**Risk Assessment**: Low-Medium\n\nThe implementation looks solid overall. Two areas worth closer inspection:\n\n1. **Cache invalidation** — The `UserPreferenceService.Update()` method invalidates the cache entry, but there's a potential race condition if two updates happen concurrently.\n2. **Serialization** — Preferences are serialized as JSON for Redis storage. The `DateTimeOffset` fields may lose timezone info during round-trip serialization."
+    },
+    {
+      "type": "section",
+      "title": "Key Change: Cache Implementation",
+      "content": [
+        {
+          "type": "code",
+          "language": "csharp",
+          "filename": "src/Services/UserPreferenceCacheService.cs",
+          "body": "public class UserPreferenceCacheService : IUserPreferenceCache\n{\n    private readonly IDistributedCache _cache;\n    private readonly ILogger<UserPreferenceCacheService> _logger;\n    private static readonly TimeSpan CacheTTL = TimeSpan.FromMinutes(5);\n\n    public async Task<UserPreferences?> GetAsync(string userId)\n    {\n        var cached = await _cache.GetStringAsync($\"user-prefs:{userId}\");\n        if (cached is null) return null;\n        return JsonSerializer.Deserialize<UserPreferences>(cached);\n    }\n\n    public async Task SetAsync(string userId, UserPreferences prefs)\n    {\n        var json = JsonSerializer.Serialize(prefs);\n        await _cache.SetStringAsync($\"user-prefs:{userId}\", json,\n            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = CacheTTL });\n    }\n}",
+          "highlight": [5, 17, 18]
+        },
+        {
+          "type": "alert",
+          "level": "warning",
+          "body": "Line 5: Hard-coded TTL. Consider making this configurable via appsettings."
+        }
+      ],
+      "actions": [
+        {
+          "label": "Post Comment",
+          "style": "primary",
+          "confirmMessage": "Post a review comment about the hard-coded TTL on PR #482?",
+          "command": {
+            "type": "cli",
+            "program": "cmd.exe",
+            "args": [
+              "/c",
+              "echo [GitHub API] POST /repos/acme/backend/pulls/482/comments && echo Status: 201 Created && echo Comment posted: \"Consider making CacheTTL configurable via appsettings instead of hard-coding TimeSpan.FromMinutes(5).\" && echo File: src/Services/UserPreferenceCacheService.cs, Line: 5"
+            ]
+          },
+          "onSuccess": "keep"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "label": "Changed Files",
+      "columns": ["File", "Changes", "Status"],
+      "rows": [
+        ["src/Services/UserPreferenceCacheService.cs", "+98", "Added"],
+        ["src/Services/UserPreferenceService.cs", "+12 / -8", "Modified"],
+        ["src/DI/ServiceRegistration.cs", "+5", "Modified"],
+        ["src/Config/CacheSettings.cs", "+22", "Added"],
+        ["tests/UserPreferenceCacheTests.cs", "+47", "Added"],
+        ["appsettings.json", "+3 / -0", "Modified"],
+        ["appsettings.Development.json", "+3 / -0", "Modified"]
+      ]
+    },
+    {
+      "type": "link",
+      "label": "View on GitHub",
+      "url": "https://github.com/acme/backend/pull/482",
+      "body": "Open pull request in browser"
+    }
+  ],
+  "actions": [
+    {
+      "label": "Approve PR",
+      "style": "success",
+      "confirmMessage": "Are you sure you want to approve PR #482?",
+      "command": {
+        "type": "cli",
+        "program": "cmd.exe",
+        "args": [
+          "/c",
+          "echo [GitHub API] POST /repos/acme/backend/pulls/482/reviews && echo Status: 200 OK && echo Review submitted: APPROVE && echo Body: \"LGTM - caching approach looks good. Ship it!\""
+        ]
+      },
+      "onSuccess": "archive"
+    },
+    {
+      "label": "Request Changes",
+      "style": "danger",
+      "confirmMessage": "Are you sure you want to request changes on PR #482?",
+      "command": {
+        "type": "cli",
+        "program": "cmd.exe",
+        "args": [
+          "/c",
+          "echo [GitHub API] POST /repos/acme/backend/pulls/482/reviews && echo Status: 200 OK && echo Review submitted: REQUEST_CHANGES && echo Body: \"Please address the cache invalidation race condition and DateTimeOffset serialization concerns.\""
+        ]
+      },
+      "onSuccess": "archive"
+    }
+  ]
+}

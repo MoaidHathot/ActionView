@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="ActionView.Api/ActionView.Api.csproj" />
+  <Project Path="ActionView.Cli/ActionView.Cli.csproj" />
+  <Project Path="ActionView.Core/ActionView.Core.csproj" />
+  <Project Path="ActionView.Mcp/ActionView.Mcp.csproj" />
+  <Project Path="ActionView.Tests/ActionView.Tests.csproj" />
+</Solution>

@@ -1,0 +1,4 @@
+/* Global reset - app-specific styles are in App.css */
+body {
+  margin: 0;
+}

@@ -1,0 +1,129 @@
+{
+  "schemaVersion": "1",
+  "type": "deploy",
+  "source": "deploy-pipeline",
+  "title": "Deploy Approval: frontend v2.14.0 → production",
+  "subtitle": "Pipeline: acme/frontend #1847 — 3 changes",
+  "severity": "high",
+  "icon": "rocket",
+  "tags": ["frontend", "production", "deploy"],
+  "content": [
+    {
+      "type": "alert",
+      "level": "info",
+      "body": "This deployment has passed all staging checks and is awaiting manual approval for production release."
+    },
+    {
+      "type": "keyValue",
+      "label": "Deployment Details",
+      "pairs": {
+        "Application": "acme/frontend",
+        "Version": "v2.14.0",
+        "Environment": "production",
+        "Pipeline Run": "#1847",
+        "Triggered By": "@ci-bot (auto)",
+        "Staging Result": "All checks passed",
+        "Commit SHA": "a3f8c2d"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "markdown",
+      "body": "## Changes in this Release\n\nThis release includes 3 merged PRs since v2.13.2:\n\n1. **PR #310**: Update checkout flow error handling — improves retry logic and user-facing error messages\n2. **PR #308**: Fix accessibility issues in navigation menu — adds ARIA labels and keyboard navigation\n3. **PR #305**: Upgrade React from 18.2 to 18.3 — minor version bump with performance improvements"
+    },
+    {
+      "type": "section",
+      "title": "Pre-deployment Checks",
+      "content": [
+        {
+          "type": "table",
+          "columns": ["Check", "Result", "Duration"],
+          "rows": [
+            ["Unit Tests", "✅ 1,247 passed, 0 failed", "2m 34s"],
+            ["Integration Tests", "✅ 89 passed, 0 failed", "8m 12s"],
+            ["E2E Tests (Playwright)", "✅ 42 passed, 0 failed", "5m 48s"],
+            ["Lighthouse Score", "✅ 96/100", "1m 05s"],
+            ["Bundle Size", "✅ 248kb (limit: 300kb)", "0m 22s"],
+            ["Security Scan (Snyk)", "✅ 0 vulnerabilities", "1m 30s"],
+            ["Staging Smoke Tests", "✅ All endpoints healthy", "3m 15s"]
+          ]
+        },
+        {
+          "type": "alert",
+          "level": "success",
+          "body": "All 7 pre-deployment checks passed. No blockers detected."
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Rollback Plan",
+      "content": [
+        {
+          "type": "markdown",
+          "body": "If issues are detected post-deploy:\n\n1. Run the automated rollback pipeline (reverts to v2.13.2)\n2. The CDN cache has a 2-minute TTL — full propagation within 5 minutes\n3. Database migrations: **None** — this release has no DB changes, rollback is safe"
+        }
+      ],
+      "actions": [
+        {
+          "label": "View Rollback Pipeline",
+          "style": "default",
+          "command": {
+            "type": "http",
+            "method": "GET",
+            "url": "https://ci.acme.com/pipelines/frontend/rollback"
+          },
+          "onSuccess": "keep"
+        }
+      ]
+    },
+    {
+      "type": "link",
+      "label": "View Pipeline Run",
+      "url": "https://ci.acme.com/pipelines/frontend/1847",
+      "body": "Open pipeline #1847 in CI dashboard"
+    }
+  ],
+  "actions": [
+    {
+      "label": "Approve Deploy",
+      "style": "success",
+      "confirmMessage": "This will deploy frontend v2.14.0 to production. Are you sure?",
+      "command": {
+        "type": "http",
+        "method": "POST",
+        "url": "https://ci.acme.com/api/pipelines/frontend/1847/approve",
+        "headers": {
+          "Authorization": "Bearer {{CI_TOKEN}}",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "approved": true,
+          "approver": "current-user"
+        }
+      },
+      "onSuccess": "archive"
+    },
+    {
+      "label": "Reject Deploy",
+      "style": "danger",
+      "confirmMessage": "This will reject the deployment and notify the team. Are you sure?",
+      "command": {
+        "type": "http",
+        "method": "POST",
+        "url": "https://ci.acme.com/api/pipelines/frontend/1847/reject",
+        "headers": {
+          "Authorization": "Bearer {{CI_TOKEN}}",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "approved": false,
+          "reason": "Rejected during manual review"
+        }
+      },
+      "onSuccess": "archive"
+    }
+  ]
+}

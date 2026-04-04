@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://actionview.dev/schemas/entry/v1.json",
+  "title": "ActionView Entry Schema v1",
+  "description": "Schema for ActionView review entries. External orchestration tools create entries conforming to this schema.",
+  "type": "object",
+  "required": ["type", "source", "title"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1",
+      "default": "1",
+      "description": "Schema version. Must be '1' for this version."
+    },
+    "id": {
+      "type": "string",
+      "description": "Unique identifier. Auto-generated if not provided."
+    },
+    "type": {
+      "type": "string",
+      "description": "Category for grouping/filtering (e.g., 'pr-review', 'incident', 'deploy')."
+    },
+    "source": {
+      "type": "string",
+      "description": "Name of the orchestration tool that created this entry."
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when the entry was created."
+    },
+    "title": {
+      "type": "string",
+      "description": "Primary display text shown in the list view."
+    },
+    "subtitle": {
+      "type": "string",
+      "description": "Secondary display text."
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"],
+      "default": "medium",
+      "description": "Urgency level."
+    },
+    "icon": {
+      "type": "string",
+      "description": "Icon name from the Lucide icon set."
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Tags for filtering."
+    },
+    "content": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/contentBlock" },
+      "default": [],
+      "description": "Ordered list of content blocks rendered in the detail view."
+    },
+    "actions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entryAction" },
+      "default": [],
+      "description": "Entry-level actions the user can take."
+    },
+    "groupId": {
+      "type": "string",
+      "description": "Optional group identifier for related entries (e.g., same CI run, same repo). Entries with the same groupId are displayed together."
+    },
+    "groupLabel": {
+      "type": "string",
+      "description": "Display label for the group (e.g., 'CI Run #1847'). Shown as the group header in the UI."
+    },
+    "pinned": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this entry is pinned to the top of the list."
+    },
+    "priority": {
+      "type": "integer",
+      "default": 0,
+      "description": "Priority for ordering. Higher values appear first."
+    }
+  },
+  "$defs": {
+    "contentBlock": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Block type that determines rendering. Built-in types: markdown, code, json, table, keyValue, link, section, divider, alert. Custom types are rendered by plugins."
+        },
+        "label": {
+          "type": "string",
+          "description": "Optional label/heading for the block."
+        },
+        "body": {
+          "description": "Primary content. Interpretation depends on type."
+        },
+        "language": {
+          "type": "string",
+          "description": "Programming language for code block syntax highlighting."
+        },
+        "filename": {
+          "type": "string",
+          "description": "Filename displayed above code blocks."
+        },
+        "highlight": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "Line numbers to highlight in code blocks."
+        },
+        "columns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Column headers for table blocks."
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "description": "Row data for table blocks."
+        },
+        "pairs": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Key-value pairs for keyValue blocks."
+        },
+        "title": {
+          "type": "string",
+          "description": "Section title."
+        },
+        "content": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/contentBlock" },
+          "description": "Nested content blocks within a section."
+        },
+        "actions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/entryAction" },
+          "description": "Actions scoped to this section."
+        },
+        "level": {
+          "type": "string",
+          "enum": ["info", "warning", "error", "success"],
+          "description": "Alert level for alert blocks."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL for link blocks."
+        }
+      }
+    },
+    "entryAction": {
+      "type": "object",
+      "required": ["label", "command"],
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "Button label text."
+        },
+        "style": {
+          "type": "string",
+          "enum": ["default", "primary", "success", "danger"],
+          "default": "default",
+          "description": "Visual style of the button."
+        },
+        "confirmMessage": {
+          "type": "string",
+          "description": "Confirmation message shown before executing."
+        },
+        "command": { "$ref": "#/$defs/actionCommand" },
+        "onSuccess": {
+          "type": "string",
+          "enum": ["archive", "keep", "delete"],
+          "default": "archive",
+          "description": "What to do with the entry after the action succeeds."
+        },
+        "undoCommand": {
+          "$ref": "#/$defs/actionCommand",
+          "description": "Optional undo command. If set, the UI shows an undo button after action execution."
+        },
+        "undoWindowSeconds": {
+          "type": "integer",
+          "description": "Seconds the undo option remains available. Falls back to the global default from actionview.json (default 10)."
+        }
+      }
+    },
+    "actionCommand": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["http", "cli"],
+          "description": "Command type."
+        },
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+          "description": "HTTP method."
+        },
+        "url": {
+          "type": "string",
+          "description": "Target URL for HTTP requests. May contain {{VAR}} placeholders."
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "HTTP headers. Values may contain {{VAR}} placeholders."
+        },
+        "body": {
+          "description": "HTTP request body."
+        },
+        "program": {
+          "type": "string",
+          "description": "Program/executable to run for CLI commands."
+        },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Arguments for CLI commands."
+        },
+        "workingDirectory": {
+          "type": "string",
+          "description": "Working directory for CLI commands."
+        }
+      }
+    }
+  }
+}

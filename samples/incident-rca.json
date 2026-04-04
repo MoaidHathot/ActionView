@@ -1,0 +1,147 @@
+{
+  "schemaVersion": "1",
+  "type": "incident",
+  "source": "incident-analyzer",
+  "title": "RCA: Payment processing timeout spike",
+  "subtitle": "Incident INC-2024-0891 — Severity: P1",
+  "severity": "high",
+  "icon": "alert-triangle",
+  "tags": ["payments", "infrastructure", "p1", "postmortem"],
+  "content": [
+    {
+      "type": "alert",
+      "level": "error",
+      "body": "This incident caused a 23-minute outage in payment processing affecting ~2,400 transactions."
+    },
+    {
+      "type": "keyValue",
+      "label": "Incident Summary",
+      "pairs": {
+        "Incident ID": "INC-2024-0891",
+        "Started": "2024-12-15T14:32:00Z",
+        "Resolved": "2024-12-15T14:55:00Z",
+        "Duration": "23 minutes",
+        "Impact": "~2,400 failed transactions",
+        "Estimated Revenue Loss": "$18,200",
+        "On-Call Engineer": "@sarah.chen"
+      }
+    },
+    {
+      "type": "markdown",
+      "body": "## Root Cause Analysis\n\nThe payment gateway connection pool exhaustion was triggered by a configuration drift in the `payment-processor` deployment. During the 14:30 rolling update, the new pods started with a default connection pool size of **10** instead of the production value of **100**.\n\n### Timeline\n\n- **14:30** — Rolling update of `payment-processor` deployment begins\n- **14:32** — First connection pool exhaustion errors logged\n- **14:34** — PagerDuty alert fires, @sarah.chen acknowledges\n- **14:38** — Elevated error rates confirmed in Grafana\n- **14:42** — Root cause identified: connection pool misconfiguration\n- **14:48** — Hotfix config pushed, rolling restart initiated\n- **14:55** — All pods healthy, error rates return to baseline"
+    },
+    {
+      "type": "section",
+      "title": "Configuration Diff",
+      "content": [
+        {
+          "type": "code",
+          "language": "yaml",
+          "filename": "k8s/payment-processor/deployment.yaml",
+          "body": "# Expected (production)\nenv:\n  - name: DB_POOL_SIZE\n    value: \"100\"\n  - name: DB_POOL_TIMEOUT\n    value: \"30s\"\n\n# Actual (deployed)\nenv:\n  - name: DB_POOL_SIZE\n    value: \"10\"     # <-- DEFAULT, NOT PRODUCTION VALUE\n  - name: DB_POOL_TIMEOUT\n    value: \"5s\"     # <-- DEFAULT, NOT PRODUCTION VALUE",
+          "highlight": [10, 12]
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Recommended Action Items",
+      "content": [
+        {
+          "type": "table",
+          "columns": ["Priority", "Action", "Owner", "Status"],
+          "rows": [
+            ["P0", "Add connection pool size to deployment validation checks", "Platform Team", "Pending"],
+            ["P0", "Create alert for connection pool utilization > 80%", "@sarah.chen", "Pending"],
+            ["P1", "Move env config to sealed secrets / external config", "Platform Team", "Pending"],
+            ["P2", "Add integration test for pool exhaustion scenario", "QA Team", "Pending"],
+            ["P2", "Document pool sizing requirements in runbook", "@sarah.chen", "Pending"]
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "label": "Create JIRA Tickets",
+          "style": "primary",
+          "confirmMessage": "This will create 5 JIRA tickets for the action items. Continue?",
+          "command": {
+            "type": "http",
+            "method": "POST",
+            "url": "https://acme.atlassian.net/rest/api/3/issue/bulk",
+            "headers": {
+              "Authorization": "Basic {{JIRA_TOKEN}}",
+              "Content-Type": "application/json"
+            },
+            "body": {
+              "issueUpdates": [
+                {
+                  "fields": {
+                    "project": { "key": "PLAT" },
+                    "summary": "Add connection pool size validation to deployment pipeline",
+                    "issuetype": { "name": "Task" },
+                    "priority": { "name": "Critical" }
+                  }
+                }
+              ]
+            }
+          },
+          "onSuccess": "keep"
+        }
+      ]
+    },
+    {
+      "type": "json",
+      "label": "Error Sample (from logs)",
+      "body": {
+        "timestamp": "2024-12-15T14:33:12.482Z",
+        "level": "ERROR",
+        "logger": "PaymentProcessor.ConnectionPool",
+        "message": "Failed to acquire connection from pool within timeout",
+        "exception": "System.TimeoutException: The connection pool has been exhausted",
+        "properties": {
+          "poolSize": 10,
+          "activeConnections": 10,
+          "pendingRequests": 847,
+          "timeoutMs": 5000
+        }
+      }
+    }
+  ],
+  "actions": [
+    {
+      "label": "Acknowledge RCA",
+      "style": "primary",
+      "command": {
+        "type": "http",
+        "method": "POST",
+        "url": "https://api.internal.acme.com/incidents/INC-2024-0891/acknowledge",
+        "headers": {
+          "Authorization": "Bearer {{INTERNAL_API_TOKEN}}"
+        },
+        "body": {
+          "status": "acknowledged",
+          "reviewer": "current-user"
+        }
+      },
+      "onSuccess": "archive"
+    },
+    {
+      "label": "Escalate to VP Engineering",
+      "style": "danger",
+      "confirmMessage": "This will send a summary email to VP Engineering and schedule a review meeting. Proceed?",
+      "command": {
+        "type": "http",
+        "method": "POST",
+        "url": "https://api.internal.acme.com/incidents/INC-2024-0891/escalate",
+        "headers": {
+          "Authorization": "Bearer {{INTERNAL_API_TOKEN}}"
+        },
+        "body": {
+          "escalateTo": "vp-engineering",
+          "scheduleMeeting": true
+        }
+      },
+      "onSuccess": "archive"
+    }
+  ]
+}
