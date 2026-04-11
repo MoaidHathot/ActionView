@@ -29,6 +29,8 @@ public sealed class DashboardStats
     public int TotalViewed { get; set; }
     public Dictionary<string, int> CountByType { get; set; } = new();
     public Dictionary<string, int> CountBySeverity { get; set; } = new();
+    public Dictionary<string, int> CountBySource { get; set; } = new();
+    public Dictionary<string, int> CountByTag { get; set; } = new();
 }
 
 /// <summary>
@@ -40,4 +42,7 @@ public sealed class ActionExecutionResult
     public string? Message { get; set; }
     public int? StatusCode { get; set; }
     public string? Output { get; set; }
+
+    /// <summary>Duration of the action execution in milliseconds.</summary>
+    public long? DurationMs { get; set; }
 }

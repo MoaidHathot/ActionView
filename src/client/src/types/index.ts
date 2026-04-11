@@ -2,7 +2,7 @@
 
 export type Severity = 'low' | 'medium' | 'high' | 'critical';
 export type EntryStatus = 'pending' | 'viewed' | 'archived';
-export type ContentBlockType = 'markdown' | 'code' | 'json' | 'table' | 'keyValue' | 'link' | 'section' | 'divider' | 'alert';
+export type ContentBlockType = 'markdown' | 'code' | 'json' | 'table' | 'keyValue' | 'link' | 'section' | 'divider' | 'alert' | 'diff' | 'image';
 export type AlertLevel = 'info' | 'warning' | 'error' | 'success';
 export type ActionStyle = 'default' | 'primary' | 'success' | 'danger';
 export type PostActionBehavior = 'archive' | 'keep' | 'delete';
@@ -31,6 +31,8 @@ export interface Entry {
   // Priority & Pinning
   pinned: boolean;
   priority: number;
+  // Provenance
+  metadata?: Record<string, string>;
 }
 
 export interface ContentBlock {
@@ -48,6 +50,10 @@ export interface ContentBlock {
   actions?: EntryAction[];
   level?: AlertLevel;
   url?: string;
+  // Image block specific
+  src?: string;
+  alt?: string;
+  width?: number;
 }
 
 export interface EntryAction {
@@ -83,6 +89,8 @@ export interface DashboardStats {
   totalViewed: number;
   countByType: Record<string, number>;
   countBySeverity: Record<string, number>;
+  countBySource: Record<string, number>;
+  countByTag: Record<string, number>;
 }
 
 export interface ActionExecutionResult {
@@ -90,6 +98,7 @@ export interface ActionExecutionResult {
   message?: string;
   statusCode?: number;
   output?: string;
+  durationMs?: number;
 }
 
 // --- Update request for editing entries ---

@@ -558,7 +558,9 @@ public sealed class EntryStore : IDisposable
             TotalPending = entries.Count(e => e.Status == EntryStatus.Pending),
             TotalViewed = entries.Count(e => e.Status == EntryStatus.Viewed),
             CountByType = entries.GroupBy(e => e.Type).ToDictionary(g => g.Key, g => g.Count()),
-            CountBySeverity = entries.GroupBy(e => e.Severity.ToString().ToLowerInvariant()).ToDictionary(g => g.Key, g => g.Count())
+            CountBySeverity = entries.GroupBy(e => e.Severity.ToString().ToLowerInvariant()).ToDictionary(g => g.Key, g => g.Count()),
+            CountBySource = entries.GroupBy(e => e.Source).ToDictionary(g => g.Key, g => g.Count()),
+            CountByTag = entries.SelectMany(e => e.Tags).GroupBy(t => t).ToDictionary(g => g.Key, g => g.Count())
         };
     }
 

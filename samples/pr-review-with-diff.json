@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1",
+  "type": "pr-review",
+  "source": "orchestra-github",
+  "title": "PR #127: Fix connection pool timeout handling",
+  "subtitle": "repo: acme/api-gateway -- opened by @alex",
+  "severity": "medium",
+  "icon": "git-pull-request",
+  "tags": ["backend", "bugfix", "connection-pool"],
+  "metadata": {
+    "orchestrationId": "code-review-pipeline",
+    "runId": "run-20250411-001",
+    "environment": "production",
+    "correlationId": "corr-abc123",
+    "orchestraPortal": "https://orchestra.internal.acme.com/runs/run-20250411-001"
+  },
+  "content": [
+    {
+      "type": "keyValue",
+      "label": "Pull Request Details",
+      "pairs": {
+        "Repository": "acme/api-gateway",
+        "Branch": "fix/pool-timeout -> main",
+        "Author": "@alex",
+        "Files Changed": "3",
+        "Lines": "+42 / -18"
+      }
+    },
+    {
+      "type": "markdown",
+      "body": "## AI Review Summary\n\nThis PR fixes a race condition in the connection pool timeout handling that could cause requests to hang indefinitely when the pool is exhausted.\n\n**Risk Assessment**: Low\n\nThe fix adds proper cancellation token propagation and a configurable fallback timeout."
+    },
+    {
+      "type": "diff",
+      "label": "Key Change",
+      "filename": "src/ConnectionPool.cs",
+      "body": "--- a/src/ConnectionPool.cs\n+++ b/src/ConnectionPool.cs\n@@ -45,12 +45,18 @@ public class ConnectionPool\n     public async Task<Connection> AcquireAsync(CancellationToken ct)\n     {\n-        var connection = await _pool.GetAsync();\n-        if (connection == null)\n+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);\n+        timeoutCts.CancelAfter(_options.AcquireTimeout);\n+\n+        try\n         {\n-            throw new TimeoutException(\"Pool exhausted\");\n+            var connection = await _pool.GetAsync(timeoutCts.Token);\n+            return connection ?? throw new PoolExhaustedException();\n+        }\n+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)\n+        {\n+            throw new TimeoutException(\n+                $\"Failed to acquire connection within {_options.AcquireTimeout.TotalSeconds}s\");\n         }\n-        return connection;\n     }"
+    },
+    {
+      "type": "image",
+      "label": "Grafana: Connection Pool Metrics (Before/After Fix)",
+      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Wikimedia_metrics_dashboard_screenshot.png/800px-Wikimedia_metrics_dashboard_screenshot.png",
+      "alt": "Grafana dashboard showing connection pool utilization dropping after the fix was deployed",
+      "width": 700
+    },
+    {
+      "type": "table",
+      "label": "Changed Files",
+      "columns": ["File", "Changes", "Status"],
+      "rows": [
+        ["src/ConnectionPool.cs", "+28 / -12", "Modified"],
+        ["src/Options/PoolOptions.cs", "+8 / -0", "Modified"],
+        ["tests/ConnectionPoolTests.cs", "+6 / -6", "Modified"]
+      ]
+    },
+    {
+      "type": "link",
+      "label": "View on GitHub",
+      "url": "https://github.com/acme/api-gateway/pull/127",
+      "body": "Open pull request in browser"
+    }
+  ],
+  "actions": [
+    {
+      "label": "Approve PR",
+      "style": "success",
+      "confirmMessage": "Approve PR #127?",
+      "command": {
+        "type": "cli",
+        "program": "cmd.exe",
+        "args": ["/c", "echo [GitHub API] PR #127 approved && echo Status: 200 OK"]
+      },
+      "onSuccess": "archive"
+    },
+    {
+      "label": "Request Changes",
+      "style": "danger",
+      "confirmMessage": "Request changes on PR #127?",
+      "command": {
+        "type": "cli",
+        "program": "cmd.exe",
+        "args": ["/c", "echo [GitHub API] Changes requested on PR #127 && echo Status: 200 OK"]
+      },
+      "onSuccess": "archive"
+    }
+  ]
+}

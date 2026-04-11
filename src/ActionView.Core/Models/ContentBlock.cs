@@ -75,6 +75,17 @@ public sealed class ContentBlock
 
     /// <summary>URL for link blocks.</summary>
     public string? Url { get; set; }
+
+    // --- Image specific ---
+
+    /// <summary>Image source: a URL or a base64 data URI (data:image/png;base64,...).</summary>
+    public string? Src { get; set; }
+
+    /// <summary>Alt text for the image.</summary>
+    public string? Alt { get; set; }
+
+    /// <summary>Optional max-width in pixels for the image.</summary>
+    public int? Width { get; set; }
 }
 
 public enum ContentBlockType
@@ -87,7 +98,9 @@ public enum ContentBlockType
     Link,
     Section,
     Divider,
-    Alert
+    Alert,
+    Diff,
+    Image
 }
 
 public enum AlertLevel

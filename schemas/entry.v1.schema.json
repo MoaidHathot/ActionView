@@ -82,6 +82,11 @@
       "type": "integer",
       "default": 0,
       "description": "Priority for ordering. Higher values appear first."
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Free-form metadata bag for provenance tracking (e.g., orchestrationId, runId, correlationId, environment)."
     }
   },
   "$defs": {
@@ -91,7 +96,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "description": "Block type that determines rendering. Built-in types: markdown, code, json, table, keyValue, link, section, divider, alert. Custom types are rendered by plugins."
+          "description": "Block type that determines rendering. Built-in types: markdown, code, json, table, keyValue, link, section, divider, alert, diff, image. Custom types are rendered by plugins."
         },
         "label": {
           "type": "string",
@@ -154,6 +159,18 @@
           "type": "string",
           "format": "uri",
           "description": "URL for link blocks."
+        },
+        "src": {
+          "type": "string",
+          "description": "Image source: a URL or a base64 data URI (data:image/png;base64,...) for image blocks."
+        },
+        "alt": {
+          "type": "string",
+          "description": "Alt text for image blocks."
+        },
+        "width": {
+          "type": "integer",
+          "description": "Optional max-width in pixels for image blocks."
         }
       }
     },

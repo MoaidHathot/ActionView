@@ -7,6 +7,8 @@ import { KeyValueBlock } from './KeyValueBlock';
 import { LinkBlock } from './LinkBlock';
 import { SectionBlock } from './SectionBlock';
 import { AlertBlock } from './AlertBlock';
+import { DiffBlock } from './DiffBlock';
+import { ImageBlock } from './ImageBlock';
 import { PluginBlockWrapper } from './PluginBlockWrapper';
 
 interface BlockRendererProps {
@@ -43,6 +45,10 @@ export function BlockRenderer({ block, entryId, sectionIndex, onSectionAction }:
       return <hr className="block-divider" />;
     case 'alert':
       return <AlertBlock block={block} />;
+    case 'diff':
+      return <DiffBlock block={block} />;
+    case 'image':
+      return <ImageBlock block={block} />;
     default:
       // Unknown block type: delegate to the plugin system
       return <PluginBlockWrapper block={block} blockType={block.type} />;

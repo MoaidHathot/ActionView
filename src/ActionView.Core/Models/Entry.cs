@@ -62,6 +62,15 @@ public sealed class Entry
     /// <summary>Priority for ordering. Higher values appear first (default 0).</summary>
     public int Priority { get; set; }
 
+    // --- Provenance (optional, set by external tools for traceability) ---
+
+    /// <summary>
+    /// Free-form metadata bag for provenance tracking.
+    /// Allows external tools to attach arbitrary key-value data
+    /// (e.g., orchestrationId, runId, correlationId, environment).
+    /// </summary>
+    public Dictionary<string, string>? Metadata { get; set; }
+
     // --- Metadata (managed by the backend, not set by external tools) ---
 
     /// <summary>Current status of the entry in the pipeline.</summary>
