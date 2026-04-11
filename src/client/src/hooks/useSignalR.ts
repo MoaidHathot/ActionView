@@ -7,6 +7,7 @@ interface SignalRCallbacks {
   onEntryUpdated?: (entry: Entry) => void;
   onEntryArchived?: (entry: Entry) => void;
   onEntryDeleted?: (entryId: string) => void;
+  onReconnected?: () => void;
 }
 
 export function useSignalR(callbacks: SignalRCallbacks) {
@@ -42,7 +43,12 @@ export function useSignalR(callbacks: SignalRCallbacks) {
       callbacksRef.current.onEntryDeleted?.(entryId);
     });
 
-    connection.onreconnected(() => setIsConnected(true));
+    connection.onreconnecting(() => setIsConnected(false));
+    connection.onreconnected(() => {
+      setIsConnected(true);
+      // Refresh data after reconnection since we may have missed events
+      callbacksRef.current.onReconnected?.();
+    });
     connection.onclose(() => setIsConnected(false));
 
     connection

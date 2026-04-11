@@ -94,7 +94,20 @@ export default function App() {
         setSelectedEntry(updatedEntry);
       }
     },
+    onReconnected: () => {
+      // Refresh all data after reconnection to pick up any events missed while disconnected
+      loadEntries();
+    },
   });
+
+  // Fallback polling: when SignalR is disconnected, poll every 5 seconds
+  useEffect(() => {
+    if (isConnected) return;
+    const interval = setInterval(() => {
+      loadEntries();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isConnected, loadEntries]);
 
   const handleSelectEntry = useCallback(async (entry: Entry) => {
     try {

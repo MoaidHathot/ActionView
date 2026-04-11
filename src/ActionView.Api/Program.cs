@@ -116,6 +116,11 @@ entryStore.EntriesExternallyAdded += entries =>
     _ = hubContext.Clients.All.EntriesAdded(entries);
 };
 
+entryStore.EntryExternallyUpdated += entry =>
+{
+    _ = hubContext.Clients.All.EntryUpdated(entry);
+};
+
 templateRegistry.StartWatching();
 entryStore.StartWatchingActive();
 inboxWatcher.Start();

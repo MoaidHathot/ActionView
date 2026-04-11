@@ -17,6 +17,7 @@ public sealed class EntryStore : IDisposable
     private readonly EntryNormalizer? _normalizer;
     private readonly ConcurrentDictionary<string, Entry> _activeCache = new();
     private readonly ConcurrentDictionary<string, byte> _internalDeletions = new();
+    private readonly ConcurrentDictionary<string, byte> _internalWrites = new();
     private FileSystemWatcher? _activeWatcher;
 
     /// <summary>Raised when entries are removed from active by an external process.</summary>
@@ -24,6 +25,9 @@ public sealed class EntryStore : IDisposable
 
     /// <summary>Raised when entries are added to active by an external process.</summary>
     public event Action<List<Entry>>? EntriesExternallyAdded;
+
+    /// <summary>Raised when entries are modified in active by an external process.</summary>
+    public event Action<Entry>? EntryExternallyUpdated;
 
     private static readonly JsonSerializerOptions ReadOptions = new()
     {
@@ -64,14 +68,14 @@ public sealed class EntryStore : IDisposable
 
         _activeWatcher = new FileSystemWatcher(ActiveDir, "*.json")
         {
-            NotifyFilter = NotifyFilters.FileName,
+            NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
             EnableRaisingEvents = true
         };
 
         _activeWatcher.Deleted += OnActiveFileDeleted;
         _activeWatcher.Created += OnActiveFileCreated;
-        _activeWatcher.Error += (_, e) =>
-            _logger.LogError(e.GetException(), "Active directory watcher error");
+        _activeWatcher.Changed += OnActiveFileChanged;
+        _activeWatcher.Error += OnActiveWatcherError;
 
         _logger.LogInformation("Watching active directory for external changes: {Path}", ActiveDir);
     }
@@ -131,6 +135,70 @@ public sealed class EntryStore : IDisposable
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Error processing externally created active file: {Path}", e.FullPath);
+            }
+        });
+    }
+
+    private void OnActiveWatcherError(object sender, ErrorEventArgs e)
+    {
+        _logger.LogError(e.GetException(), "Active directory watcher error");
+
+        // Attempt to restart the watcher (matching InboxWatcher behavior)
+        try
+        {
+            if (_activeWatcher is not null)
+            {
+                _activeWatcher.EnableRaisingEvents = false;
+                _activeWatcher.EnableRaisingEvents = true;
+                _logger.LogInformation("Active directory watcher restarted after error");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to restart active directory watcher");
+        }
+    }
+
+    private void OnActiveFileChanged(object sender, FileSystemEventArgs e)
+    {
+        var id = Path.GetFileNameWithoutExtension(e.Name);
+        if (string.IsNullOrEmpty(id)) return;
+
+        // If this write was triggered by our own code, ignore it
+        if (_internalWrites.TryRemove(id, out _)) return;
+
+        // Small delay to ensure the file is fully written
+        Task.Delay(200).ContinueWith(_ =>
+        {
+            try
+            {
+                if (!File.Exists(e.FullPath)) return;
+
+                Entry? entry = null;
+                for (var attempt = 0; attempt < 3; attempt++)
+                {
+                    try
+                    {
+                        var json = File.ReadAllText(e.FullPath);
+                        entry = JsonSerializer.Deserialize<Entry>(json, ReadOptions);
+                        break;
+                    }
+                    catch (IOException) when (attempt < 2)
+                    {
+                        Thread.Sleep(300);
+                    }
+                }
+
+                if (entry is not null)
+                {
+                    _activeCache[entry.Id] = entry;
+                    _logger.LogInformation("Detected externally modified active entry: {Id}", entry.Id);
+                    EntryExternallyUpdated?.Invoke(entry);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error processing externally modified active file: {Path}", e.FullPath);
             }
         });
     }
@@ -285,6 +353,9 @@ public sealed class EntryStore : IDisposable
         // Write to active directory
         var activeFilePath = Path.Combine(ActiveDir, $"{entry.Id}.json");
         var enrichedJson = JsonSerializer.Serialize(entry, WriteOptions);
+
+        // Mark as internal so the active watcher ignores this write
+        _internalWrites[entry.Id] = 0;
         File.WriteAllText(activeFilePath, enrichedJson);
 
         // Cache it
@@ -495,6 +566,9 @@ public sealed class EntryStore : IDisposable
     {
         var filePath = Path.Combine(ActiveDir, $"{entry.Id}.json");
         var json = JsonSerializer.Serialize(entry, WriteOptions);
+
+        // Mark as internal so the watcher ignores this write
+        _internalWrites[entry.Id] = 0;
         File.WriteAllText(filePath, json);
     }
 
@@ -525,6 +599,8 @@ public sealed class EntryStore : IDisposable
         {
             _activeWatcher.Deleted -= OnActiveFileDeleted;
             _activeWatcher.Created -= OnActiveFileCreated;
+            _activeWatcher.Changed -= OnActiveFileChanged;
+            _activeWatcher.Error -= OnActiveWatcherError;
             _activeWatcher.Dispose();
             _activeWatcher = null;
         }
