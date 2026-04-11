@@ -24,7 +24,7 @@ const DEFAULT_UNDO_WINDOW = 10;
 function ActiveView({
   entries, stats, loading, filters, setFilters,
   selectionMode, setSelectionMode, selectedIds, setSelectedIds,
-  undoItems, setUndoItems, loadEntries, uniqueTypes, uniqueSources,
+  setUndoItems, loadEntries, uniqueTypes, uniqueSources,
   templates,
 }: {
   entries: Entry[];
@@ -36,7 +36,6 @@ function ActiveView({
   setSelectionMode: (v: boolean | ((p: boolean) => boolean)) => void;
   selectedIds: Set<string>;
   setSelectedIds: (v: Set<string> | ((p: Set<string>) => Set<string>)) => void;
-  undoItems: UndoItem[];
   setUndoItems: (v: UndoItem[] | ((p: UndoItem[]) => UndoItem[])) => void;
   loadEntries: () => void;
   uniqueTypes: string[];
@@ -73,12 +72,12 @@ function ActiveView({
     }
   }, [navigate]);
 
-  const handleDismiss = useCallback((id: string) => {
+  const handleDismiss = useCallback((_id: string) => {
     setSelectedEntry(null);
     navigate('/active', { replace: true });
   }, [navigate]);
 
-  const handleDelete = useCallback((id: string) => {
+  const handleDelete = useCallback((_id: string) => {
     setSelectedEntry(null);
     navigate('/active', { replace: true });
   }, [navigate]);
@@ -142,21 +141,6 @@ function ActiveView({
     const tpl = templates.find((t) => t.type === selectedEntry.type);
     return tpl?.description;
   }, [selectedEntry, templates]);
-
-  // --- Navigation helpers for keyboard shortcuts ---
-  const currentIndex = useMemo(
-    () => (selectedEntry ? entries.findIndex((e) => e.id === selectedEntry.id) : -1),
-    [entries, selectedEntry],
-  );
-
-  const selectByIndex = useCallback(
-    (index: number) => {
-      if (index >= 0 && index < entries.length) {
-        handleSelectEntry(entries[index]);
-      }
-    },
-    [entries, handleSelectEntry],
-  );
 
   return (
     <div className="split-panel">
@@ -430,7 +414,6 @@ export default function App() {
                 setSelectionMode={setSelectionMode}
                 selectedIds={selectedIds}
                 setSelectedIds={setSelectedIds}
-                undoItems={undoItems}
                 setUndoItems={setUndoItems}
                 loadEntries={loadEntries}
                 uniqueTypes={uniqueTypes}

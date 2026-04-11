@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Clock, CheckCircle, XCircle, Inbox } from 'lucide-react';
+import { CheckCircle, XCircle, Inbox } from 'lucide-react';
 import type { Entry, EntryFilters } from '../types';
 import { api } from '../api/client';
 import { formatDistanceToNow } from '../utils/time';
