@@ -102,6 +102,9 @@ export default function App() {
       const fullEntry = await api.getEntry(entry.id);
       setSelectedEntry(fullEntry);
       setEntries((prev) => prev.map((e) => (e.id === fullEntry.id ? fullEntry : e)));
+      if (entry.status === 'pending') {
+        setStats((prev) => prev ? { ...prev, totalPending: Math.max(0, prev.totalPending - 1), totalViewed: prev.totalViewed + 1 } : prev);
+      }
     } catch (err) {
       console.error('Failed to load entry:', err);
     }
