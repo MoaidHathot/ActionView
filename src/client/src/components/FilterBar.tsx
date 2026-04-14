@@ -1,17 +1,15 @@
 import { useState } from 'react';
 import { Search, X, Filter } from 'lucide-react';
-import type { EntryFilters, DashboardStats } from '../types';
+import type { EntryFilters } from '../types';
 
 interface Props {
   filters: EntryFilters;
   onChange: (filters: EntryFilters) => void;
   types: string[];
   sources: string[];
-  /** Stats for showing entry counts per filter value */
-  stats?: DashboardStats | null;
 }
 
-export function FilterBar({ filters, onChange, types, sources, stats }: Props) {
+export function FilterBar({ filters, onChange, types, sources }: Props) {
   const [expanded, setExpanded] = useState(false);
   const hasFilters = !!(filters.type || filters.severity || filters.source || filters.tags || filters.search);
 
@@ -22,13 +20,6 @@ export function FilterBar({ filters, onChange, types, sources, stats }: Props) {
   const clear = () => {
     onChange({});
   };
-
-  const typeCount = (t: string) => stats?.countByType?.[t];
-  const severityCount = (s: string) => stats?.countBySeverity?.[s];
-  const sourceCount = (s: string) => stats?.countBySource?.[s];
-
-  const formatOption = (label: string, count: number | undefined) =>
-    count !== undefined ? `${label} (${count})` : label;
 
   return (
     <div className="filter-bar">
@@ -74,7 +65,7 @@ export function FilterBar({ filters, onChange, types, sources, stats }: Props) {
             >
               <option value="">All</option>
               {types.map((t) => (
-                <option key={t} value={t}>{formatOption(t, typeCount(t))}</option>
+                <option key={t} value={t}>{t}</option>
               ))}
             </select>
           </div>
@@ -86,10 +77,10 @@ export function FilterBar({ filters, onChange, types, sources, stats }: Props) {
               onChange={(e) => update({ severity: e.target.value || undefined })}
             >
               <option value="">All</option>
-              <option value="critical">{formatOption('Critical', severityCount('critical'))}</option>
-              <option value="high">{formatOption('High', severityCount('high'))}</option>
-              <option value="medium">{formatOption('Medium', severityCount('medium'))}</option>
-              <option value="low">{formatOption('Low', severityCount('low'))}</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
             </select>
           </div>
           <div className="filter-group">
@@ -101,7 +92,7 @@ export function FilterBar({ filters, onChange, types, sources, stats }: Props) {
             >
               <option value="">All</option>
               {sources.map((s) => (
-                <option key={s} value={s}>{formatOption(s, sourceCount(s))}</option>
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
           </div>

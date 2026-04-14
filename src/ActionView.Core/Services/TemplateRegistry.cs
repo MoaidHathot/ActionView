@@ -16,6 +16,7 @@ public sealed class TemplateRegistry : IDisposable
     private readonly ILogger<TemplateRegistry> _logger;
     private readonly Dictionary<string, EntryTemplate> _templates = new(StringComparer.OrdinalIgnoreCase);
     private FileSystemWatcher? _watcher;
+    private Timer? _debounceTimer;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -50,14 +51,24 @@ public sealed class TemplateRegistry : IDisposable
             EnableRaisingEvents = true
         };
 
-        _watcher.Created += (_, _) => LoadAll();
-        _watcher.Changed += (_, _) => LoadAll();
-        _watcher.Deleted += (_, _) => LoadAll();
-        _watcher.Renamed += (_, _) => LoadAll();
+        _watcher.Created += (_, _) => ScheduleReload();
+        _watcher.Changed += (_, _) => ScheduleReload();
+        _watcher.Deleted += (_, _) => ScheduleReload();
+        _watcher.Renamed += (_, _) => ScheduleReload();
         _watcher.Error += (_, e) =>
             _logger.LogError(e.GetException(), "Template directory watcher error");
 
         _logger.LogInformation("Watching templates directory: {Path}", _templatesDirectory);
+    }
+
+    /// <summary>
+    /// Debounce watcher events: wait 300ms after the last event before reloading,
+    /// so a batch of writes (e.g. from TemplateScanner) triggers only one reload.
+    /// </summary>
+    private void ScheduleReload()
+    {
+        _debounceTimer?.Dispose();
+        _debounceTimer = new Timer(_ => LoadAll(), null, 300, Timeout.Infinite);
     }
 
     /// <summary>Get a template by entry type. Returns null if no template is registered.</summary>
@@ -142,9 +153,16 @@ public sealed class TemplateRegistry : IDisposable
 
         foreach (var file in Directory.EnumerateFiles(_templatesDirectory, "*.json"))
         {
+            // Skip dotfiles (e.g. .auto-discovered.json manifest)
+            var fileName = Path.GetFileName(file);
+            if (fileName.StartsWith('.'))
+                continue;
+
             try
             {
-                var json = File.ReadAllText(file);
+                using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var reader = new StreamReader(stream);
+                var json = reader.ReadToEnd();
                 var template = JsonSerializer.Deserialize<EntryTemplate>(json, JsonOptions);
                 if (template is not null && !string.IsNullOrWhiteSpace(template.Type))
                 {
@@ -162,6 +180,8 @@ public sealed class TemplateRegistry : IDisposable
 
     public void Dispose()
     {
+        _debounceTimer?.Dispose();
+        _debounceTimer = null;
         _watcher?.Dispose();
         _watcher = null;
     }

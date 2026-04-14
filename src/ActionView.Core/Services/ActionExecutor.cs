@@ -29,16 +29,12 @@ public sealed class ActionExecutor
     /// </summary>
     public async Task<ActionExecutionResult> ExecuteAsync(ActionCommand command, CancellationToken ct = default)
     {
-        var sw = Stopwatch.StartNew();
-        var result = command.Type switch
+        return command.Type switch
         {
             CommandType.Http => await ExecuteHttpAsync(command, ct),
             CommandType.Cli => await ExecuteCliAsync(command, ct),
             _ => new ActionExecutionResult { Success = false, Message = $"Unknown command type: {command.Type}" }
         };
-        sw.Stop();
-        result.DurationMs = sw.ElapsedMilliseconds;
-        return result;
     }
 
     private async Task<ActionExecutionResult> ExecuteHttpAsync(ActionCommand command, CancellationToken ct)

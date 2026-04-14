@@ -342,6 +342,24 @@ public static class EntryEndpoints
             return Results.Ok(registry.GetAll());
         });
 
+        templateGroup.MapGet("/auto-discovered", (AppConfig config) =>
+        {
+            var manifestPath = Path.Combine(config.DataDirectory, "templates", ".auto-discovered.json");
+            if (!File.Exists(manifestPath))
+                return Results.Ok(Array.Empty<string>());
+
+            try
+            {
+                var json = File.ReadAllText(manifestPath);
+                var types = System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? [];
+                return Results.Ok(types);
+            }
+            catch
+            {
+                return Results.Ok(Array.Empty<string>());
+            }
+        });
+
         templateGroup.MapGet("/{type}", (string type, TemplateRegistry registry) =>
         {
             var template = registry.GetTemplate(type);

@@ -39,11 +39,19 @@ public sealed class ConfigLoader
         var json = File.ReadAllText(configPath);
         var config = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions) ?? new AppConfig();
 
-        // Resolve relative DataDirectory against config file location
+        // Resolve relative paths against config file location
+        var configDir = Path.GetDirectoryName(Path.GetFullPath(configPath))!;
+
         if (!Path.IsPathRooted(config.DataDirectory))
         {
-            var configDir = Path.GetDirectoryName(Path.GetFullPath(configPath))!;
             config.DataDirectory = Path.GetFullPath(Path.Combine(configDir, config.DataDirectory));
+        }
+
+        if (config.Templates.ExternalDirectory is not null
+            && !Path.IsPathRooted(config.Templates.ExternalDirectory))
+        {
+            config.Templates.ExternalDirectory =
+                Path.GetFullPath(Path.Combine(configDir, config.Templates.ExternalDirectory));
         }
 
         EnsureDirectories(config.DataDirectory);

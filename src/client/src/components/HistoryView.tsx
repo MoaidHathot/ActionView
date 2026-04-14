@@ -1,25 +1,16 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { CheckCircle, XCircle, Inbox } from 'lucide-react';
+import { Clock, CheckCircle, XCircle } from 'lucide-react';
 import type { Entry, EntryFilters } from '../types';
 import { api } from '../api/client';
 import { formatDistanceToNow } from '../utils/time';
-import { highlightText } from '../utils/highlight';
 import { BlockRenderer } from './content-blocks/BlockRenderer';
 import { FilterBar } from './FilterBar';
-import { useTimestampRefresh } from '../hooks/useRelativeTime';
 
 export function HistoryView() {
-  const { entryId } = useParams<{ entryId?: string }>();
-  const navigate = useNavigate();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<EntryFilters>({});
-  const timestampTick = useTimestampRefresh(30_000);
-
-  // suppress unused warning
-  void timestampTick;
 
   const uniqueTypes = useMemo(
     () => [...new Set(entries.map((e) => e.type))].sort(),
@@ -46,25 +37,6 @@ export function HistoryView() {
     loadHistory();
   }, [loadHistory]);
 
-  // Load entry from URL param
-  useEffect(() => {
-    if (entryId) {
-      api.getHistoryEntry(entryId)
-        .then((entry) => setSelectedEntry(entry))
-        .catch(() => {
-          setSelectedEntry(null);
-          navigate('/history', { replace: true });
-        });
-    } else {
-      setSelectedEntry(null);
-    }
-  }, [entryId, navigate]);
-
-  const handleSelectEntry = useCallback((entry: Entry) => {
-    setSelectedEntry(entry);
-    navigate(`/history/${entry.id}`);
-  }, [navigate]);
-
   return (
     <div className="history-view">
       <div className="entry-list">
@@ -78,16 +50,15 @@ export function HistoryView() {
           <div className="loading">Loading history...</div>
         ) : entries.length === 0 ? (
           <div className="entry-list-empty">
-            <Inbox size={40} strokeWidth={1.2} />
-            <p className="empty-title">No history yet</p>
-            <p className="subtle">Entries that are dismissed, actioned, or archived will appear here.</p>
+            <Clock size={32} />
+            <p>No history yet</p>
           </div>
         ) : (
           entries.map((entry) => (
             <div
               key={entry.id}
               className={`entry-list-item history-item ${selectedEntry?.id === entry.id ? 'selected' : ''}`}
-              onClick={() => handleSelectEntry(entry)}
+              onClick={() => setSelectedEntry(entry)}
             >
               <div className="entry-list-item-indicator">
                 {entry.outcome?.success ? (
@@ -97,9 +68,7 @@ export function HistoryView() {
                 )}
               </div>
               <div className="entry-list-item-content">
-                <div className="entry-list-item-title">
-                  {highlightText(entry.title, filters.search)}
-                </div>
+                <div className="entry-list-item-title">{entry.title}</div>
                 <div className="entry-list-item-meta">
                   <span className="outcome-action">{entry.outcome?.action}</span>
                   <span className="entry-time">

@@ -117,6 +117,9 @@ export const api = {
   getTemplate: (type: string) =>
     fetchJson<EntryTemplate>(`${API_BASE}/templates/${type}`),
 
+  getAutoDiscoveredTypes: () =>
+    fetchJson<string[]>(`${API_BASE}/templates/auto-discovered`),
+
   createTemplate: (template: EntryTemplate) =>
     fetchJson<EntryTemplate>(`${API_BASE}/templates`, {
       method: 'POST',

@@ -1,16 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Routes, Route, useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
-import { Activity, Clock, Wifi, WifiOff, Rows3 } from 'lucide-react';
-import type { Entry, DashboardStats, EntryFilters, EntryTemplate } from './types';
+import { Activity, Clock, FileText, Wifi, WifiOff, Rows3 } from 'lucide-react';
+import type { Entry, DashboardStats, EntryFilters } from './types';
 import type { UndoItem } from './components/UndoToast';
 import { api } from './api/client';
 import { useSignalR } from './hooks/useSignalR';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import type { KeyboardShortcut } from './hooks/useKeyboardShortcuts';
-import { useTimestampRefresh } from './hooks/useRelativeTime';
 import { EntryList } from './components/EntryList';
 import { EntryDetail } from './components/EntryDetail';
 import { HistoryView } from './components/HistoryView';
+import { TemplatesView } from './components/TemplatesView';
 import { FilterBar } from './components/FilterBar';
 import { BatchActionBar } from './components/BatchActionBar';
 import { ShortcutHelp } from './components/ShortcutHelp';
@@ -18,193 +17,14 @@ import { ToastContainer, useToasts } from './components/ToastContainer';
 import { UndoToastContainer } from './components/UndoToast';
 import './App.css';
 
+type View = 'active' | 'history' | 'templates';
+
 const DEFAULT_UNDO_WINDOW = 10;
 
-/** Inner component that uses route params for the active view */
-function ActiveView({
-  entries, stats, loading, filters, setFilters,
-  selectionMode, setSelectionMode, selectedIds, setSelectedIds,
-  setUndoItems, loadEntries, uniqueTypes, uniqueSources,
-  templates,
-}: {
-  entries: Entry[];
-  stats: DashboardStats | null;
-  loading: boolean;
-  filters: EntryFilters;
-  setFilters: (f: EntryFilters) => void;
-  selectionMode: boolean;
-  setSelectionMode: (v: boolean | ((p: boolean) => boolean)) => void;
-  selectedIds: Set<string>;
-  setSelectedIds: (v: Set<string> | ((p: Set<string>) => Set<string>)) => void;
-  setUndoItems: (v: UndoItem[] | ((p: UndoItem[]) => UndoItem[])) => void;
-  loadEntries: () => void;
-  uniqueTypes: string[];
-  uniqueSources: string[];
-  templates: EntryTemplate[];
-}) {
-  const { entryId } = useParams<{ entryId?: string }>();
-  const navigate = useNavigate();
-  const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
-  const timestampTick = useTimestampRefresh(30_000);
-
-  // Load entry from URL param
-  useEffect(() => {
-    if (entryId) {
-      api.getEntry(entryId)
-        .then((entry) => setSelectedEntry(entry))
-        .catch(() => {
-          setSelectedEntry(null);
-          navigate('/active', { replace: true });
-        });
-    } else {
-      setSelectedEntry(null);
-    }
-  }, [entryId, navigate]);
-
-  // When selectedEntry changes from the list, also sync local state
-  const handleSelectEntry = useCallback(async (entry: Entry) => {
-    try {
-      const fullEntry = await api.getEntry(entry.id);
-      setSelectedEntry(fullEntry);
-      navigate(`/active/${entry.id}`);
-    } catch (err) {
-      console.error('Failed to load entry:', err);
-    }
-  }, [navigate]);
-
-  const handleDismiss = useCallback((_id: string) => {
-    setSelectedEntry(null);
-    navigate('/active', { replace: true });
-  }, [navigate]);
-
-  const handleDelete = useCallback((_id: string) => {
-    setSelectedEntry(null);
-    navigate('/active', { replace: true });
-  }, [navigate]);
-
-  const handleActionExecuted = useCallback(() => {
-    loadEntries();
-    setSelectedEntry(null);
-    navigate('/active', { replace: true });
-  }, [loadEntries, navigate]);
-
-  const handleEntryUpdated = useCallback((updated: Entry) => {
-    setSelectedEntry(updated);
-  }, []);
-
-  // --- Batch selection ---
-  const handleToggleSelect = useCallback((id: string) => {
-    setSelectedIds((prev: Set<string>) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, [setSelectedIds]);
-
-  const handleSelectAll = useCallback(() => {
-    setSelectedIds((prev: Set<string>) => {
-      if (prev.size === entries.length) return new Set();
-      return new Set(entries.map((e) => e.id));
-    });
-  }, [entries, setSelectedIds]);
-
-  const handleClearSelection = useCallback(() => {
-    setSelectedIds(new Set());
-    setSelectionMode(false);
-  }, [setSelectedIds, setSelectionMode]);
-
-  const handleBatchComplete = useCallback(() => {
-    setSelectedIds(new Set());
-    setSelectionMode(false);
-    loadEntries();
-  }, [loadEntries, setSelectedIds, setSelectionMode]);
-
-  // Compute common action labels for batch bar
-  const commonActions = useMemo(() => {
-    if (selectedIds.size === 0) return [];
-    const selected = entries.filter((e) => selectedIds.has(e.id));
-    if (selected.length === 0) return [];
-    const labelSets = selected.map((e) => new Set(e.actions.map((a) => a.label)));
-    const first = labelSets[0];
-    return [...first].filter((label) => labelSets.every((s) => s.has(label)));
-  }, [entries, selectedIds]);
-
-  // --- Undo ---
-  const handleUndoCreated = useCallback((item: UndoItem) => {
-    setUndoItems((prev: UndoItem[]) => [...prev, item]);
-  }, [setUndoItems]);
-
-  // Template description for the selected entry
-  const templateDesc = useMemo(() => {
-    if (!selectedEntry) return undefined;
-    const tpl = templates.find((t) => t.type === selectedEntry.type);
-    return tpl?.description;
-  }, [selectedEntry, templates]);
-
-  return (
-    <div className="split-panel">
-      <div className="panel-left">
-        <FilterBar
-          filters={filters}
-          onChange={setFilters}
-          types={uniqueTypes}
-          sources={uniqueSources}
-          stats={stats}
-        />
-        {selectionMode && selectedIds.size > 0 && (
-          <BatchActionBar
-            selectedIds={selectedIds}
-            commonActions={commonActions}
-            onClearSelection={handleClearSelection}
-            onBatchComplete={handleBatchComplete}
-          />
-        )}
-        {loading ? (
-          <div className="loading">Loading...</div>
-        ) : (
-          <EntryList
-            entries={entries}
-            selectedId={selectedEntry?.id}
-            onSelect={handleSelectEntry}
-            selectionMode={selectionMode}
-            selectedIds={selectedIds}
-            onToggleSelect={handleToggleSelect}
-            onSelectAll={handleSelectAll}
-            searchQuery={filters.search}
-            _tick={timestampTick}
-          />
-        )}
-      </div>
-      <div className="panel-right">
-        {selectedEntry ? (
-          <EntryDetail
-            entry={selectedEntry}
-            onDismiss={handleDismiss}
-            onDelete={handleDelete}
-            onActionExecuted={handleActionExecuted}
-            onEntryUpdated={handleEntryUpdated}
-            onUndoCreated={handleUndoCreated}
-            defaultUndoWindow={DEFAULT_UNDO_WINDOW}
-            templateDescription={templateDesc}
-          />
-        ) : (
-          <div className="no-selection">
-            <Activity size={48} strokeWidth={1} />
-            <p>Select an entry to review</p>
-            <p className="subtle">Press <kbd>?</kbd> for keyboard shortcuts</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
-  const location = useLocation();
-  const navigate = useNavigate();
-
+  const [view, setView] = useState<View>('active');
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<EntryFilters>({});
@@ -219,9 +39,6 @@ export default function App() {
 
   // Shortcut help
   const [showShortcuts, setShowShortcuts] = useState(false);
-
-  // Templates (Feature 5)
-  const [templates, setTemplates] = useState<EntryTemplate[]>([]);
 
   // Derive unique types and sources from current entries for filter dropdowns
   const uniqueTypes = useMemo(
@@ -252,13 +69,6 @@ export default function App() {
     loadEntries();
   }, [loadEntries]);
 
-  // Load templates once (Feature 5)
-  useEffect(() => {
-    api.getTemplates()
-      .then(setTemplates)
-      .catch(() => setTemplates([]));
-  }, []);
-
   const { isConnected } = useSignalR({
     onEntriesAdded: (newEntries) => {
       setEntries((prev) => [...newEntries, ...prev]);
@@ -268,33 +78,98 @@ export default function App() {
     onEntryArchived: (archivedEntry) => {
       setEntries((prev) => prev.filter((e) => e.id !== archivedEntry.id));
       setStats((prev) => prev ? { ...prev, totalPending: Math.max(0, prev.totalPending - 1) } : prev);
+      if (selectedEntry?.id === archivedEntry.id) {
+        setSelectedEntry(null);
+      }
     },
     onEntryDeleted: (entryId) => {
       setEntries((prev) => prev.filter((e) => e.id !== entryId));
       setStats((prev) => prev ? { ...prev, totalPending: Math.max(0, prev.totalPending - 1) } : prev);
+      if (selectedEntry?.id === entryId) {
+        setSelectedEntry(null);
+      }
     },
     onEntryUpdated: (updatedEntry) => {
       setEntries((prev) => prev.map((e) => (e.id === updatedEntry.id ? updatedEntry : e)));
-    },
-    onReconnected: () => {
-      // Refresh all data after reconnection to pick up any events missed while disconnected
-      loadEntries();
+      if (selectedEntry?.id === updatedEntry.id) {
+        setSelectedEntry(updatedEntry);
+      }
     },
   });
 
-  // Fallback polling: when SignalR is disconnected, poll every 5 seconds
-  useEffect(() => {
-    if (isConnected) return;
-    const interval = setInterval(() => {
-      loadEntries();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [isConnected, loadEntries]);
+  const handleSelectEntry = useCallback(async (entry: Entry) => {
+    try {
+      const fullEntry = await api.getEntry(entry.id);
+      setSelectedEntry(fullEntry);
+      setEntries((prev) => prev.map((e) => (e.id === fullEntry.id ? fullEntry : e)));
+    } catch (err) {
+      console.error('Failed to load entry:', err);
+    }
+  }, []);
 
-  // Derive current view from URL
-  const isActiveView = location.pathname.startsWith('/active') || location.pathname === '/';
+  const handleDismiss = useCallback((id: string) => {
+    setEntries((prev) => prev.filter((e) => e.id !== id));
+    setSelectedEntry(null);
+  }, []);
 
-  // --- Undo handlers ---
+  const handleDelete = useCallback((id: string) => {
+    setEntries((prev) => prev.filter((e) => e.id !== id));
+    setSelectedEntry(null);
+  }, []);
+
+  const handleActionExecuted = useCallback(() => {
+    loadEntries();
+    setSelectedEntry(null);
+  }, [loadEntries]);
+
+  const handleEntryUpdated = useCallback((updated: Entry) => {
+    setEntries((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+    setSelectedEntry(updated);
+  }, []);
+
+  // --- Batch selection ---
+  const handleToggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === entries.length) return new Set();
+      return new Set(entries.map((e) => e.id));
+    });
+  }, [entries]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+  }, []);
+
+  const handleBatchComplete = useCallback(() => {
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+    loadEntries();
+  }, [loadEntries]);
+
+  // Compute common action labels for batch bar
+  const commonActions = useMemo(() => {
+    if (selectedIds.size === 0) return [];
+    const selected = entries.filter((e) => selectedIds.has(e.id));
+    if (selected.length === 0) return [];
+    const labelSets = selected.map((e) => new Set(e.actions.map((a) => a.label)));
+    const first = labelSets[0];
+    return [...first].filter((label) => labelSets.every((s) => s.has(label)));
+  }, [entries, selectedIds]);
+
+  // --- Undo ---
+  const handleUndoCreated = useCallback((item: UndoItem) => {
+    setUndoItems((prev) => [...prev, item]);
+  }, []);
+
   const handleUndoDismiss = useCallback((id: number) => {
     setUndoItems((prev) => prev.filter((i) => i.id !== id));
   }, []);
@@ -303,15 +178,46 @@ export default function App() {
     loadEntries();
   }, [loadEntries]);
 
+  // --- Navigation helpers for keyboard shortcuts ---
+  const currentIndex = useMemo(
+    () => (selectedEntry ? entries.findIndex((e) => e.id === selectedEntry.id) : -1),
+    [entries, selectedEntry],
+  );
+
+  const selectByIndex = useCallback(
+    (index: number) => {
+      if (index >= 0 && index < entries.length) {
+        handleSelectEntry(entries[index]);
+      }
+    },
+    [entries, handleSelectEntry],
+  );
+
   // --- Keyboard shortcuts definition ---
   const shortcuts: KeyboardShortcut[] = useMemo(
     () => [
-      { key: 'j', label: 'j', description: 'Next entry', handler: () => {} },
-      { key: 'k', label: 'k', description: 'Previous entry', handler: () => {} },
-      { key: 'x', label: 'x', description: 'Toggle selection on focused entry', handler: () => {} },
-      { key: 'd', label: 'd', description: 'Dismiss selected entry', handler: () => {} },
-      { key: 'e', label: 'e', description: 'Edit selected entry', handler: () => {} },
-      { key: 'p', label: 'p', description: 'Toggle pin on selected entry', handler: () => {} },
+      { key: 'j', label: 'j', description: 'Next entry', handler: () => selectByIndex(currentIndex + 1) },
+      { key: 'k', label: 'k', description: 'Previous entry', handler: () => selectByIndex(Math.max(0, currentIndex - 1)) },
+      { key: 'x', label: 'x', description: 'Toggle selection on focused entry', handler: () => {
+        if (selectedEntry) {
+          if (!selectionMode) setSelectionMode(true);
+          handleToggleSelect(selectedEntry.id);
+        }
+      }},
+      { key: 'd', label: 'd', description: 'Dismiss selected entry', handler: () => {
+        if (selectedEntry) handleDismiss(selectedEntry.id);
+      }},
+      { key: 'e', label: 'e', description: 'Edit selected entry', handler: () => {
+        // Editing is handled in EntryDetail — this is a hint
+      }},
+      { key: 'p', label: 'p', description: 'Toggle pin on selected entry', handler: async () => {
+        if (selectedEntry) {
+          try {
+            const updated = await api.pinEntry(selectedEntry.id);
+            handleEntryUpdated(updated);
+          } catch {}
+        }
+      }},
       { key: '/', label: '/', description: 'Focus search', handler: () => {
         const input = document.querySelector<HTMLInputElement>('.filter-search-input');
         input?.focus();
@@ -322,8 +228,9 @@ export default function App() {
           return !prev;
         });
       }},
-      { key: '1', label: '1', description: 'Switch to Active view', handler: () => navigate('/active') },
-      { key: '2', label: '2', description: 'Switch to History view', handler: () => navigate('/history') },
+      { key: '1', label: '1', description: 'Switch to Active view', handler: () => setView('active') },
+      { key: '2', label: '2', description: 'Switch to History view', handler: () => setView('history') },
+      { key: '3', label: '3', description: 'Switch to Templates view', handler: () => setView('templates') },
       {
         key: '?', label: '?', description: 'Show keyboard shortcuts',
         handler: () => setShowShortcuts((prev) => !prev),
@@ -333,18 +240,19 @@ export default function App() {
         global: true,
         handler: () => {
           if (showShortcuts) { setShowShortcuts(false); return; }
-          if (selectionMode) { setSelectedIds(new Set()); setSelectionMode(false); return; }
-          if (location.pathname.startsWith('/active/')) {
-            navigate('/active');
-            return;
-          }
+          if (selectionMode) { handleClearSelection(); return; }
+          if (selectedEntry) { setSelectedEntry(null); return; }
         },
       },
     ],
-    [selectionMode, showShortcuts, navigate, location.pathname],
+    [
+      currentIndex, selectByIndex, selectedEntry, selectionMode,
+      handleDismiss, handleEntryUpdated, handleToggleSelect, handleClearSelection,
+      showShortcuts,
+    ],
   );
 
-  useKeyboardShortcuts({ shortcuts, enabled: isActiveView });
+  useKeyboardShortcuts({ shortcuts, enabled: view === 'active' });
 
   const pendingCount = stats?.totalPending ?? 0;
 
@@ -360,19 +268,26 @@ export default function App() {
         </div>
         <div className="app-nav">
           <button
-            className={`nav-btn ${isActiveView ? 'active' : ''}`}
-            onClick={() => navigate('/active')}
+            className={`nav-btn ${view === 'active' ? 'active' : ''}`}
+            onClick={() => setView('active')}
           >
             <Activity size={14} />
             Active
             {pendingCount > 0 && <span className="badge-small">{pendingCount}</span>}
           </button>
           <button
-            className={`nav-btn ${location.pathname.startsWith('/history') ? 'active' : ''}`}
-            onClick={() => navigate('/history')}
+            className={`nav-btn ${view === 'history' ? 'active' : ''}`}
+            onClick={() => setView('history')}
           >
             <Clock size={14} />
             History
+          </button>
+          <button
+            className={`nav-btn ${view === 'templates' ? 'active' : ''}`}
+            onClick={() => setView('templates')}
+          >
+            <FileText size={14} />
+            Templates
           </button>
         </div>
         <div className="app-header-right">
@@ -399,31 +314,62 @@ export default function App() {
       </header>
 
       <main className="app-main">
-        <Routes>
-          <Route path="/" element={<Navigate to="/active" replace />} />
-          <Route
-            path="/active/:entryId?"
-            element={
-              <ActiveView
-                entries={entries}
-                stats={stats}
-                loading={loading}
+        {view === 'active' ? (
+          <div className="split-panel">
+            <div className="panel-left">
+              <FilterBar
                 filters={filters}
-                setFilters={setFilters}
-                selectionMode={selectionMode}
-                setSelectionMode={setSelectionMode}
-                selectedIds={selectedIds}
-                setSelectedIds={setSelectedIds}
-                setUndoItems={setUndoItems}
-                loadEntries={loadEntries}
-                uniqueTypes={uniqueTypes}
-                uniqueSources={uniqueSources}
-                templates={templates}
+                onChange={setFilters}
+                types={uniqueTypes}
+                sources={uniqueSources}
               />
-            }
-          />
-          <Route path="/history/:entryId?" element={<HistoryView />} />
-        </Routes>
+              {selectionMode && selectedIds.size > 0 && (
+                <BatchActionBar
+                  selectedIds={selectedIds}
+                  commonActions={commonActions}
+                  onClearSelection={handleClearSelection}
+                  onBatchComplete={handleBatchComplete}
+                />
+              )}
+              {loading ? (
+                <div className="loading">Loading...</div>
+              ) : (
+                <EntryList
+                  entries={entries}
+                  selectedId={selectedEntry?.id}
+                  onSelect={handleSelectEntry}
+                  selectionMode={selectionMode}
+                  selectedIds={selectedIds}
+                  onToggleSelect={handleToggleSelect}
+                  onSelectAll={handleSelectAll}
+                />
+              )}
+            </div>
+            <div className="panel-right">
+              {selectedEntry ? (
+                <EntryDetail
+                  entry={selectedEntry}
+                  onDismiss={handleDismiss}
+                  onDelete={handleDelete}
+                  onActionExecuted={handleActionExecuted}
+                  onEntryUpdated={handleEntryUpdated}
+                  onUndoCreated={handleUndoCreated}
+                  defaultUndoWindow={DEFAULT_UNDO_WINDOW}
+                />
+              ) : (
+                <div className="no-selection">
+                  <Activity size={48} strokeWidth={1} />
+                  <p>Select an entry to review</p>
+                  <p className="subtle">Press <kbd>?</kbd> for keyboard shortcuts</p>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : view === 'history' ? (
+          <HistoryView />
+        ) : (
+          <TemplatesView />
+        )}
       </main>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       <UndoToastContainer

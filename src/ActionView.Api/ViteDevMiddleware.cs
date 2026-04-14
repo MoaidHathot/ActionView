@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.WebSockets;
+using Microsoft.Extensions.Hosting;
 
 namespace ActionView.Api;
 
@@ -15,8 +16,9 @@ public sealed class ViteDevMiddleware : IDisposable
     private readonly ILogger<ViteDevMiddleware> _logger;
     private readonly Process? _viteProcess;
     private readonly string _viteBaseUrl;
+    private bool _disposed;
 
-    public ViteDevMiddleware(RequestDelegate next, ILogger<ViteDevMiddleware> logger, string clientDir, int vitePort = 5174)
+    public ViteDevMiddleware(RequestDelegate next, ILogger<ViteDevMiddleware> logger, IHostApplicationLifetime lifetime, string clientDir, int vitePort = 5174)
     {
         _next = next;
         _logger = logger;
@@ -32,6 +34,11 @@ public sealed class ViteDevMiddleware : IDisposable
 
         // Launch Vite dev server
         _viteProcess = StartVite(clientDir, vitePort);
+
+        // Ensure Vite is killed when the host is shutting down (Ctrl+C).
+        // UseMiddleware<T>() does not dispose middleware instances, so without
+        // this the child process would be orphaned.
+        lifetime.ApplicationStopping.Register(Dispose);
     }
 
     private Process? StartVite(string clientDir, int port)
@@ -240,15 +247,22 @@ public sealed class ViteDevMiddleware : IDisposable
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+
         if (_viteProcess is not null && !_viteProcess.HasExited)
         {
             try
             {
                 _viteProcess.Kill(entireProcessTree: true);
+                _viteProcess.WaitForExit(3000);
                 _viteProcess.Dispose();
                 _logger.LogInformation("Vite dev server stopped");
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error stopping Vite dev server");
+            }
         }
 
         _httpClient.Dispose();

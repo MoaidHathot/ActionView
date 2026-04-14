@@ -434,7 +434,7 @@ var templateListCommand = new Command("list", "List all registered templates");
 templateListCommand.SetHandler((string? configPath) =>
 {
     var config = ConfigLoader.Load(configPath);
-    var registry = new TemplateRegistry(config.DataDirectory, NullLogger<TemplateRegistry>.Instance);
+    var registry = CreateRegistry(config);
 
     var templates = registry.GetAll();
     if (templates.Count == 0)
@@ -464,7 +464,7 @@ templateShowCommand.AddArgument(templateTypeArg);
 templateShowCommand.SetHandler((string type, string? configPath) =>
 {
     var config = ConfigLoader.Load(configPath);
-    var registry = new TemplateRegistry(config.DataDirectory, NullLogger<TemplateRegistry>.Instance);
+    var registry = CreateRegistry(config);
 
     var template = registry.GetTemplate(type);
     if (template is null)
@@ -536,7 +536,7 @@ templateRegisterCommand.SetHandler((FileInfo? file, string? inlineJson, string? 
     }
 
     var config = ConfigLoader.Load(configPath);
-    var registry = new TemplateRegistry(config.DataDirectory, NullLogger<TemplateRegistry>.Instance);
+    var registry = CreateRegistry(config);
 
     try
     {
@@ -561,7 +561,7 @@ templateRemoveCommand.AddArgument(templateRemoveTypeArg);
 templateRemoveCommand.SetHandler((string type, string? configPath) =>
 {
     var config = ConfigLoader.Load(configPath);
-    var registry = new TemplateRegistry(config.DataDirectory, NullLogger<TemplateRegistry>.Instance);
+    var registry = CreateRegistry(config);
 
     if (registry.Remove(type))
     {
@@ -642,3 +642,19 @@ statsCommand.SetHandler((string? configPath) =>
 rootCommand.AddCommand(statsCommand);
 
 return await rootCommand.InvokeAsync(args);
+
+// --- Helpers ---
+
+/// <summary>
+/// Create a TemplateRegistry and run the external template scan if configured.
+/// </summary>
+static TemplateRegistry CreateRegistry(AppConfig config)
+{
+    var registry = new TemplateRegistry(config.DataDirectory, NullLogger<TemplateRegistry>.Instance);
+    if (config.Templates.ExternalDirectory is not null)
+    {
+        var scanner = new TemplateScanner(registry, config.DataDirectory, NullLogger<TemplateScanner>.Instance);
+        scanner.Scan(config.Templates.ExternalDirectory, config.Templates.Recursive);
+    }
+    return registry;
+}

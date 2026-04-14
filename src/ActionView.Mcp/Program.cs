@@ -74,7 +74,19 @@ if (!readOnly)
         .WithTools<TemplateWriteTools>();
 }
 
-await builder.Build().RunAsync();
+var host = builder.Build();
+
+// Scan external templates directory if configured
+if (config.Templates.ExternalDirectory is not null)
+{
+    var scanner = new TemplateScanner(
+        host.Services.GetRequiredService<TemplateRegistry>(),
+        config.DataDirectory,
+        host.Services.GetRequiredService<ILogger<TemplateScanner>>());
+    scanner.Scan(config.Templates.ExternalDirectory, config.Templates.Recursive);
+}
+
+await host.RunAsync();
 
 // --- Helpers ---
 

@@ -116,12 +116,18 @@ entryStore.EntriesExternallyAdded += entries =>
     _ = hubContext.Clients.All.EntriesAdded(entries);
 };
 
-entryStore.EntryExternallyUpdated += entry =>
-{
-    _ = hubContext.Clients.All.EntryUpdated(entry);
-};
-
 templateRegistry.StartWatching();
+
+// Scan external templates directory if configured (after StartWatching so the
+// watcher sees the final state via its own Created/Changed events).
+if (config.Templates.ExternalDirectory is not null)
+{
+    var scanner = new TemplateScanner(
+        templateRegistry, config.DataDirectory,
+        app.Services.GetRequiredService<ILogger<TemplateScanner>>());
+    scanner.Scan(config.Templates.ExternalDirectory, config.Templates.Recursive);
+}
+
 entryStore.StartWatchingActive();
 inboxWatcher.Start();
 
