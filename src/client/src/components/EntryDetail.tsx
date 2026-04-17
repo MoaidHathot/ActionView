@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Trash2, X, Edit3, Pin, PinOff } from 'lucide-react';
 import type { Entry } from '../types';
 import type { UndoItem } from './UndoToast';
@@ -23,6 +23,11 @@ export function EntryDetail({
 }: Props) {
   const [actionResult, setActionResult] = useState<{ success: boolean; message: string } | null>(null);
   const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    setActionResult(null);
+    setEditing(false);
+  }, [entry.id]);
 
   const handleAction = useCallback(async (actionIndex: number) => {
     try {
@@ -121,6 +126,9 @@ export function EntryDetail({
         </div>
         {entry.subtitle && <p className="entry-detail-subtitle">{entry.subtitle}</p>}
         <div className="entry-detail-meta-row">
+          {entry.type && (
+            <span className="entry-type-badge">{entry.type}</span>
+          )}
           <div className="entry-detail-tags">
             {entry.tags.map((tag) => (
               <span key={tag} className="tag">{tag}</span>

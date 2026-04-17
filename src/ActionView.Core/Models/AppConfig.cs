@@ -37,8 +37,59 @@ public sealed class AppConfig
 
 public sealed class NotificationConfig
 {
-    /// <summary>Whether Windows toast notifications are enabled.</summary>
+    /// <summary>Whether notifications are enabled globally.</summary>
     public bool Enabled { get; set; } = true;
+
+    /// <summary>Palantir Windows toast notification settings.</summary>
+    public PalantirConfig Palantir { get; set; } = new();
+}
+
+/// <summary>
+/// Configuration for Palantir Windows toast notifications.
+/// Palantir is invoked via <c>dnx palantir</c> (.NET 10 tool execution).
+/// </summary>
+public sealed class PalantirConfig
+{
+    /// <summary>Whether Palantir toast notifications are enabled. Default: true.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Toast duration: "short" (~5 seconds) or "long" (~25 seconds).
+    /// Null uses Palantir's default (short).
+    /// </summary>
+    public string? Duration { get; set; }
+
+    /// <summary>Attribution text shown at the bottom of the toast.</summary>
+    public string? Attribution { get; set; } = "ActionView";
+
+    /// <summary>
+    /// URL to open when the toast body is clicked.
+    /// Defaults to the ActionView dashboard URL.
+    /// </summary>
+    public string? LaunchUrl { get; set; } = "http://localhost:5173";
+
+    /// <summary>Path or URL to an image used as the toast app logo.</summary>
+    public string? Image { get; set; }
+
+    /// <summary>
+    /// Audio sound name (e.g., "default", "im", "mail", "reminder", "sms").
+    /// Null uses the system default notification sound.
+    /// </summary>
+    public string? Audio { get; set; }
+
+    /// <summary>Suppress audio on toast notifications.</summary>
+    public bool Silent { get; set; }
+
+    /// <summary>
+    /// Toast scenario: "default", "alarm", "reminder", or "incomingCall".
+    /// Null uses Palantir's default.
+    /// </summary>
+    public string? Scenario { get; set; }
+
+    /// <summary>
+    /// Path or URL to a hero image displayed at the top of the toast.
+    /// </summary>
+    public string? HeroImage { get; set; }
 }
 
 /// <summary>

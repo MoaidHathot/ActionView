@@ -36,6 +36,7 @@ builder.Services.AddSingleton(sp =>
     new InboxWatcher(config.DataDirectory, sp.GetRequiredService<EntryStore>(), sp.GetRequiredService<ILogger<InboxWatcher>>()));
 builder.Services.AddSingleton<ActionExecutor>();
 builder.Services.AddHttpClient<ActionExecutor>();
+builder.Services.AddSingleton<ToastNotifier>();
 
 // SignalR
 builder.Services.AddSignalR().AddJsonProtocol(options =>
@@ -98,10 +99,12 @@ var inboxWatcher = app.Services.GetRequiredService<InboxWatcher>();
 var entryStore = app.Services.GetRequiredService<EntryStore>();
 var templateRegistry = app.Services.GetRequiredService<TemplateRegistry>();
 var hubContext = app.Services.GetRequiredService<IHubContext<EntryHub, IEntryHubClient>>();
+var toastNotifier = app.Services.GetRequiredService<ToastNotifier>();
 
 inboxWatcher.EntriesReceived += entries =>
 {
     _ = hubContext.Clients.All.EntriesAdded(entries);
+    toastNotifier.NotifyEntries(entries);
 };
 
 // Watch active directory for external changes (e.g. CLI deletes)

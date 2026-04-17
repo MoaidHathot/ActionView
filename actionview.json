@@ -1,7 +1,18 @@
 {
   "dataDirectory": "data",
   "notifications": {
-    "enabled": true
+    "enabled": true,
+    "palantir": {
+      "enabled": true,
+      "duration": null,
+      "attribution": "ActionView",
+      "launchUrl": "http://localhost:5173",
+      "image": null,
+      "audio": null,
+      "silent": false,
+      "scenario": null,
+      "heroImage": null
+    }
   },
   "secrets": {}
 }
