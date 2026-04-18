@@ -1,0 +1,132 @@
+{
+  "schemaVersion": "1",
+  "type": "ai-research",
+  "source": "research-orchestrator",
+  "title": "Research: What caused the 2024 CrowdStrike outage and what were its global effects?",
+  "subtitle": "4 agents, 11 sources — High confidence",
+  "severity": "medium",
+  "icon": "brain",
+  "tags": ["ai", "research", "cybersecurity", "incident-analysis"],
+  "content": [
+    {
+      "type": "alert",
+      "level": "success",
+      "body": "Research complete. All agents reached consensus with high confidence."
+    },
+    {
+      "type": "keyValue",
+      "label": "Research Overview",
+      "pairs": {
+        "Query": "What caused the 2024 CrowdStrike outage and what were its global effects?",
+        "Confidence": "High (92%)",
+        "Agents Used": "4 (Researcher, Fact-Checker, Web-Search, Synthesizer)",
+        "Sources Consulted": "11",
+        "Duration": "34s",
+        "Model": "claude-sonnet-4-20250514"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "markdown",
+      "label": "Answer",
+      "body": "## Summary\n\nOn July 19, 2024, a faulty content update to CrowdStrike's Falcon sensor caused approximately **8.5 million Windows devices** worldwide to crash with Blue Screen of Death (BSOD) errors. The issue was a logic error in Channel File 291, which is part of CrowdStrike's rapid-response content update mechanism that bypasses normal software release cycles.\n\n### Root Cause\n\nThe Falcon sensor's content interpreter encountered an out-of-bounds memory read when processing the malformed channel file. Because the sensor operates as a kernel-level driver, the fault triggered an unrecoverable system crash. The flawed update was live for approximately **78 minutes** before CrowdStrike reverted it.\n\n### Global Impact\n\n- **Airlines**: Over 5,000 flights cancelled globally. Delta Air Lines alone cancelled 7,000+ flights over five days, costing an estimated $500 million.\n- **Healthcare**: Hospitals in the UK, Germany, and Israel reported disrupted electronic health records, forcing fallback to paper-based workflows.\n- **Financial Services**: Banks, stock exchanges, and payment processors experienced outages. Visa and Mastercard reported intermittent transaction failures.\n- **Government**: 911 dispatch systems in multiple US states went offline. US Social Security offices closed.\n- **Retail**: Self-checkout systems, point-of-sale terminals, and inventory management systems failed across major retailers.\n\n### Recovery\n\nRecovery required **manual intervention** on each affected machine — booting into Safe Mode and deleting the faulty channel file. This made large-scale remediation extremely slow. Many organizations took **days to weeks** to fully recover.\n\n### Estimated Cost\n\nInsured losses alone were estimated at **$5.4 billion**, making it one of the most expensive IT incidents in history."
+    },
+    {
+      "type": "section",
+      "title": "Agent Activity",
+      "content": [
+        {
+          "type": "table",
+          "label": "Execution Trace",
+          "columns": ["Agent", "Role", "Duration", "Status", "Output"],
+          "rows": [
+            ["Researcher", "Primary deep-dive analysis", "12s", "Done", "Identified root cause, generated technical summary"],
+            ["Web-Search", "Online source retrieval", "8s", "Done", "Found 11 sources across news, technical blogs, official reports"],
+            ["Fact-Checker", "Cross-reference claims against sources", "9s", "Done", "Verified 14/14 key claims, 0 contradictions"],
+            ["Synthesizer", "Merge and summarize findings", "5s", "Done", "Produced final answer with confidence score"]
+          ]
+        },
+        {
+          "type": "markdown",
+          "body": "### Sub-agent Details\n\nThe **Researcher** agent spawned 2 sub-agents:\n- `technical-analyzer` — Focused on the kernel driver failure mechanism and Channel File 291 specifics\n- `impact-analyzer` — Focused on sector-by-sector impact data and financial estimates\n\nThe **Fact-Checker** agent cross-referenced all monetary figures and statistics against at least 2 independent sources each."
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Sources",
+      "content": [
+        {
+          "type": "table",
+          "label": "Consulted Sources",
+          "columns": ["#", "Source", "Type", "Used In"],
+          "rows": [
+            ["1", "CrowdStrike Preliminary Post Incident Review (Jul 24, 2024)", "Official Report", "Root cause, timeline"],
+            ["2", "CrowdStrike Root Cause Analysis (Aug 6, 2024)", "Official Report", "Technical details"],
+            ["3", "Microsoft: Recovery of systems from CrowdStrike Falcon update", "Vendor Advisory", "Device count (8.5M)"],
+            ["4", "Reuters: CrowdStrike update causes global IT outage", "News", "Airline/financial impact"],
+            ["5", "BBC: Hospitals and banks hit by global IT outage", "News", "Healthcare/banking impact"],
+            ["6", "US House Committee hearing testimony (Sep 2024)", "Government", "Impact statistics"],
+            ["7", "Parametrix Insurance: CrowdStrike outage loss estimates", "Industry Analysis", "Financial estimates ($5.4B)"],
+            ["8", "Delta Air Lines SEC filing (Q3 2024)", "Financial Filing", "Delta-specific costs"],
+            ["9", "CISA advisory on CrowdStrike incident", "Government", "Recovery guidance"],
+            ["10", "Wired: Inside the CrowdStrike disaster", "Investigative", "Technical deep-dive"],
+            ["11", "The Register: CrowdStrike postmortem analysis", "Technical Media", "Channel file mechanism"]
+          ]
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Reasoning",
+      "content": [
+        {
+          "type": "markdown",
+          "body": "### Reasoning Chain\n\n1. **Decomposed the query** into two sub-questions: (a) technical root cause, (b) global effects by sector.\n2. **Prioritized official sources** — CrowdStrike's own PIR and RCA, plus Microsoft's device count data, as the most authoritative for technical details.\n3. **Cross-referenced impact data** across news outlets and government testimony to filter out early inaccurate reports (e.g., initial claims of \"billions of devices\" were corrected to 8.5 million).\n4. **Resolved conflicting cost estimates** — early estimates ranged from $1B to $15B; settled on Parametrix's $5.4B insured-loss figure as the most methodologically sound and widely cited.\n5. **Assessed confidence** — High confidence on root cause (official reports). High confidence on impact breadth. Medium-high confidence on exact financial figures (estimates vary by methodology)."
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "label": "Raw Output",
+      "body": "### Orchestration Metadata\n\n- **Orchestration ID**: `orch_a7f3c291d4e8`\n- **Query**: What caused the 2024 CrowdStrike outage and what were its global effects?\n- **Confidence**: 0.92\n- **Total Tokens**: 44,880\n- **Wall Time**: 34s\n- **Timestamp**: 2025-04-17T10:22:41Z\n\n### Agent Breakdown\n\n| Agent | Model | Tokens In | Tokens Out | Details |\n|---|---|---|---|---|\n| Researcher | claude-sonnet-4-20250514 | 12,480 | 3,200 | Sub-agents: `technical-analyzer`, `impact-analyzer` |\n| Web-Search | gpt-4o-mini | 8,100 | 1,600 | 6 queries executed |\n| Fact-Checker | claude-sonnet-4-20250514 | 9,400 | 1,100 | 14 claims verified, 0 contradictions |\n| Synthesizer | claude-sonnet-4-20250514 | 6,200 | 2,800 | — |"
+    }
+  ],
+  "actions": [
+    {
+      "label": "Accept",
+      "style": "success",
+      "confirmMessage": "Mark this research as accepted and archive it?",
+      "command": {
+        "type": "cli",
+        "program": "cmd.exe",
+        "args": ["/c", "echo Research accepted and archived."]
+      },
+      "onSuccess": "archive"
+    },
+    {
+      "label": "Research Further",
+      "style": "primary",
+      "confirmMessage": "Send this topic back to the research orchestrator for deeper investigation?",
+      "command": {
+        "type": "cli",
+        "program": "cmd.exe",
+        "args": ["/c", "echo Research re-queued for deeper investigation."]
+      },
+      "onSuccess": "keep"
+    },
+    {
+      "label": "Reject",
+      "style": "danger",
+      "confirmMessage": "Reject this research result? It will be archived with a rejected status.",
+      "command": {
+        "type": "cli",
+        "program": "cmd.exe",
+        "args": ["/c", "echo Research rejected."]
+      },
+      "onSuccess": "archive"
+    }
+  ]
+}
