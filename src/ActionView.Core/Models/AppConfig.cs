@@ -31,6 +31,16 @@ public sealed class AppConfig
     /// </summary>
     public int UndoWindowSeconds { get; set; } = 10;
 
+    /// <summary>
+    /// URL the API host listens on. Accepts a full URL such as
+    /// "http://localhost:5180" or "http://0.0.0.0:5180".
+    /// CLI flags --urls and --port take precedence over this value.
+    /// Defaults to "http://localhost:5173".
+    /// </summary>
+    public string ListenUrl { get; set; } = DefaultListenUrl;
+
+    public const string DefaultListenUrl = "http://localhost:5173";
+
     public static string DefaultDataDirectory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".actionview");
 }

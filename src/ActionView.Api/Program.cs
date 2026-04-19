@@ -15,6 +15,34 @@ var configPath = args.FirstOrDefault(a => a.StartsWith("--config="))?.Split('=',
 var appsettingsConfigPath = builder.Configuration.GetValue<string>("ActionView:ConfigPath");
 var config = ConfigLoader.Load(configPath, appsettingsConfigPath);
 
+// Resolve the listen URL.
+// Precedence (highest first):
+//   1. --urls <url>          (standard ASP.NET Core flag, full URL)
+//   2. --port <port>         (shortcut, binds to http://localhost:<port>)
+//   3. config.ListenUrl      (from actionview.json)
+static string? ReadArgValue(string[] args, string name)
+{
+    for (var i = 0; i < args.Length; i++)
+    {
+        if (args[i] == name && i + 1 < args.Length)
+            return args[i + 1];
+        if (args[i].StartsWith(name + "=", StringComparison.Ordinal))
+            return args[i].Substring(name.Length + 1);
+    }
+    return null;
+}
+
+var urlsArg = ReadArgValue(args, "--urls");
+var portArg = ReadArgValue(args, "--port");
+
+string listenUrl;
+if (!string.IsNullOrWhiteSpace(urlsArg))
+    listenUrl = urlsArg;
+else if (!string.IsNullOrWhiteSpace(portArg) && int.TryParse(portArg, out var port))
+    listenUrl = $"http://localhost:{port}";
+else
+    listenUrl = config.ListenUrl;
+
 // JSON serialization options
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -142,4 +170,4 @@ app.Lifetime.ApplicationStopping.Register(() =>
     entryStore.Dispose();
 });
 
-app.Run("http://localhost:5173");
+app.Run(listenUrl);
