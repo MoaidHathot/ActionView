@@ -82,14 +82,23 @@ app.UseWebSockets();
 // In development, launch Vite and proxy non-API requests to it.
 // In production, serve the built React files embedded in the assembly.
 ManifestEmbeddedFileProvider? embeddedProvider = null;
-if (app.Environment.IsDevelopment())
+
+// Only launch Vite when running from the source tree. Packaged tool runs can
+// inherit a Development environment from the shell, but they only have the
+// embedded client assets available.
+var clientDir = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", "client"));
+var useViteDev = app.Environment.IsDevelopment() &&
+    File.Exists(Path.Combine(clientDir, "package.json"));
+
+if (useViteDev)
 {
-    // Resolve client directory relative to the project root
-    var clientDir = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", "client"));
     app.UseViteDev(clientDir);
 }
 else
 {
+    if (app.Environment.IsDevelopment())
+        app.Logger.LogInformation("Client source directory not found; serving embedded dashboard assets instead.");
+
     embeddedProvider = new ManifestEmbeddedFileProvider(
         typeof(Program).Assembly, "wwwroot");
     app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = embeddedProvider });

@@ -51,10 +51,11 @@ public sealed class ViteDevMiddleware : IDisposable
 
         // On Windows, npm is a batch script (npm.cmd) so we must invoke it via cmd.exe
         var isWindows = OperatingSystem.IsWindows();
+        var viteArgs = $"run dev -- --host localhost --port {port} --strictPort";
         var psi = new ProcessStartInfo
         {
             FileName = isWindows ? "cmd.exe" : "npm",
-            Arguments = isWindows ? "/c npm run dev" : "run dev",
+            Arguments = isWindows ? $"/c npm {viteArgs}" : viteArgs,
             WorkingDirectory = clientDir,
             UseShellExecute = false,
             CreateNoWindow = true,
