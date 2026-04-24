@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1",
+  "type": "pr-review",
+  "source": "powerreview",
+  "createdAt": "2026-04-23T04:00:00Z",
+  "title": "AI proposed code changes for PR 15337578",
+  "subtitle": "repo: msazure/One/ZTS - source branch: feature/moaid/small-refactoring",
+  "severity": "medium",
+  "icon": "git-pull-request",
+  "tags": ["powerreview", "ai", "proposal", "azure-devops", "zts"],
+  "groupId": "pr-15337578",
+  "groupLabel": "PR 15337578",
+  "content": [
+    {
+      "type": "keyValue",
+      "label": "Pull Request Details",
+      "pairs": {
+        "PR": "15337578",
+        "Repository": "msazure/One/ZTS",
+        "Source Branch": "feature/moaid/small-refactoring",
+        "Alternative Branch With Applied Commits": "feature/moaid/small-refactoring-2",
+        "AI Proposals": "2"
+      }
+    },
+    {
+      "type": "markdown",
+      "body": "This entry contains all code changes proposed by AI in the PowerReview session for Azure DevOps PR `15337578`. Each proposal below includes the exact unified diff so it can be reviewed directly in ActionView."
+    },
+    {
+      "type": "section",
+      "title": "Proposal 1: Move RunVersion assignment after UpsertDataProcessAsync",
+      "content": [
+        {
+          "type": "keyValue",
+          "pairs": {
+            "Proposal ID": "68615702-141a-4731-a4bd-0ad0e48fd714",
+            "Thread ID": "238146676",
+            "Status": "Approved",
+            "Fix Branch": "powerreview/fix/thread-238146676",
+            "Applied Commit": "310e5ddae",
+            "File": "src/ResourceProvider/ResourceProvider.Service/Orchestration/CreateOrUpdateOrchestrationV1/CreateOrUpdateOrchestrator.cs"
+          }
+        },
+        {
+          "type": "markdown",
+          "body": "Move `internalMetadata.RunVersion = runVersion;` from before `UpsertDataProcessAsync` to after it. This avoids persisting an incremented run version if the backend call fails, which would otherwise create non-sequential customer-visible run versions on retry."
+        },
+        {
+          "type": "code",
+          "language": "diff",
+          "filename": "CreateOrUpdateOrchestrator.diff",
+          "body": "diff --git a/src/ResourceProvider/ResourceProvider.Service/Orchestration/CreateOrUpdateOrchestrationV1/CreateOrUpdateOrchestrator.cs b/src/ResourceProvider/ResourceProvider.Service/Orchestration/CreateOrUpdateOrchestrationV1/CreateOrUpdateOrchestrator.cs\nindex e0126656f..647a0c498 100644\n--- a/src/ResourceProvider/ResourceProvider.Service/Orchestration/CreateOrUpdateOrchestrationV1/CreateOrUpdateOrchestrator.cs\n+++ b/src/ResourceProvider/ResourceProvider.Service/Orchestration/CreateOrUpdateOrchestrationV1/CreateOrUpdateOrchestrator.cs\n@@ -62,7 +62,6 @@ public partial class CreateOrUpdateOrchestrator : TaskOrchestrator<CreateOrUpdat\n             internalMetadata.TargetLogAnalyticsWorkspaceId = resource.Properties.TargetLogAnalyticsWorkspaceId;\n             internalMetadata.MoboBroker = new InternalMoboBrokerInfo(ManagedResourceGroupId: setupMrgResult.MrgResourceId);\n             internalMetadata.LogAnalytics = new InternalLogAnalyticsInfo(DcrImmutableId: laResult.DcrImmutableId.MustBeInitialized(), DcrLogsIngestionEndpoint: laResult.DcrLogsIngestionEndpoint.MustBeInitialized());\n-            internalMetadata.RunVersion = runVersion;\n \n             await UpsertDataProcessAsync(\n                 context: context,\n@@ -72,6 +71,10 @@ public partial class CreateOrUpdateOrchestrator : TaskOrchestrator<CreateOrUpdat\n                 activityTaskOptions: activityTaskOptions,\n                 logger: logger\n             ).ConfigureAwait(true);\n+\n+            // RunVersion is set after UpsertDataProcessAsync to avoid persisting an incremented version\n+            // in the finally block if the backend call fails, which would cause non-sequential versions on retry.\n+            internalMetadata.RunVersion = runVersion;\n         }\n         catch (RpPublicException ex)\n"
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Proposal 2: Convert expression-bodied methods to statement blocks",
+      "content": [
+        {
+          "type": "keyValue",
+          "pairs": {
+            "Proposal ID": "cc06f55b-0af5-448b-985f-717f0cbcd9e3",
+            "Thread ID": "238153862",
+            "Status": "Approved",
+            "Fix Branch": "powerreview/fix/thread-238153862",
+            "Applied Commit": "d3456cef9",
+            "File": "src/ResourceProvider/ResourceProvider.Service/Orchestration/SetWorkloadSegmentsV1/SetWorkloadSegmentsDataProcessActivity.cs"
+          }
+        },
+        {
+          "type": "markdown",
+          "body": "Convert `CreateUpsertRequest` and `ToWorkloadSegmentsV1` from expression-bodied members to statement blocks with explicit `return` statements for consistency with the surrounding code style."
+        },
+        {
+          "type": "code",
+          "language": "diff",
+          "filename": "SetWorkloadSegmentsDataProcessActivity.diff",
+          "body": "diff --git a/src/ResourceProvider/ResourceProvider.Service/Orchestration/SetWorkloadSegmentsV1/SetWorkloadSegmentsDataProcessActivity.cs b/src/ResourceProvider/ResourceProvider.Service/Orchestration/SetWorkloadSegmentsV1/SetWorkloadSegmentsDataProcessActivity.cs\nindex c28b42f03..bb7b647fc 100644\n--- a/src/ResourceProvider/ResourceProvider.Service/Orchestration/SetWorkloadSegmentsV1/SetWorkloadSegmentsDataProcessActivity.cs\n+++ b/src/ResourceProvider/ResourceProvider.Service/Orchestration/SetWorkloadSegmentsV1/SetWorkloadSegmentsDataProcessActivity.cs\n@@ -56,7 +56,8 @@ internal partial class SetWorkloadSegmentsDataProcessActivity : TaskActivity<Set\n     }\n \n     private static WorkloadSegmentsUpsertRequestV1 CreateUpsertRequest(SetWorkloadSegmentsDataProcessActivityInput input)\n-        => new()\n+    {\n+        return new()\n         {\n             TenantId = input.TenantId,\n             SegmentationManagerId = input.SegmentationManagerId.ToString(),\n@@ -75,14 +76,18 @@ internal partial class SetWorkloadSegmentsDataProcessActivity : TaskActivity<Set\n             RunVersion = input.RunVersion.ToString(),\n             WorkloadSegments = { input.WorkloadSegments.Select(ToWorkloadSegmentsV1) }\n         };\n+    }\n \n-    private static WorkloadSegmentsV1 ToWorkloadSegmentsV1(SetWorkloadSegmentRecord record) => new()\n+    private static WorkloadSegmentsV1 ToWorkloadSegmentsV1(SetWorkloadSegmentRecord record)\n     {\n-        WorkloadArmId = record.WorkloadId,\n-        App = record.Application,\n-        Environment = record.Environment,\n-        Role = record.Role\n-    };\n+        return new()\n+        {\n+            WorkloadArmId = record.WorkloadId,\n+            App = record.Application,\n+            Environment = record.Environment,\n+            Role = record.Role\n+        };\n+    }\n \n     private static partial class Log\n     {\n"
+        }
+      ]
+    },
+    {
+      "type": "link",
+      "label": "Open Azure DevOps PR",
+      "url": "https://dev.azure.com/msazure/One/_git/ZTS/pullrequest/15337578",
+      "body": "View the original pull request"
+    }
+  ],
+  "actions": []
+}

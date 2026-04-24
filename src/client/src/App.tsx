@@ -71,8 +71,7 @@ export default function App() {
 
   const { isConnected } = useSignalR({
     onEntriesAdded: (newEntries) => {
-      setEntries((prev) => [...newEntries, ...prev]);
-      setStats((prev) => prev ? { ...prev, totalPending: prev.totalPending + newEntries.length } : prev);
+      loadEntries();
       addToast(newEntries);
     },
     onEntryArchived: (archivedEntry) => {
@@ -94,6 +93,9 @@ export default function App() {
       if (selectedEntry?.id === updatedEntry.id) {
         setSelectedEntry(updatedEntry);
       }
+    },
+    onReconnected: () => {
+      loadEntries();
     },
   });
 
