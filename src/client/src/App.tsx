@@ -69,6 +69,22 @@ export default function App() {
     loadEntries();
   }, [loadEntries]);
 
+  useEffect(() => {
+    const reloadIfVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void loadEntries();
+      }
+    };
+
+    document.addEventListener('visibilitychange', reloadIfVisible);
+    window.addEventListener('online', reloadIfVisible);
+
+    return () => {
+      document.removeEventListener('visibilitychange', reloadIfVisible);
+      window.removeEventListener('online', reloadIfVisible);
+    };
+  }, [loadEntries]);
+
   const { isConnected } = useSignalR({
     onEntriesAdded: (newEntries) => {
       loadEntries();

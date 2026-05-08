@@ -10,6 +10,13 @@ interface SignalRCallbacks {
   onReconnected?: () => void;
 }
 
+const reconnectPolicy: signalR.IRetryPolicy = {
+  nextRetryDelayInMilliseconds: (retryContext) => {
+    const delays = [0, 2_000, 10_000, 30_000, 60_000];
+    return delays[Math.min(retryContext.previousRetryCount, delays.length - 1)];
+  },
+};
+
 export function useSignalR(callbacks: SignalRCallbacks) {
   const connectionRef = useRef<signalR.HubConnection | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -19,9 +26,13 @@ export function useSignalR(callbacks: SignalRCallbacks) {
   callbacksRef.current = callbacks;
 
   useEffect(() => {
+    let disposed = false;
+    let startRetryTimer: number | undefined;
+    let resyncAfterStart = false;
+
     const connection = new signalR.HubConnectionBuilder()
       .withUrl('/hubs/entries')
-      .withAutomaticReconnect()
+      .withAutomaticReconnect(reconnectPolicy)
       .configureLogging(signalR.LogLevel.Warning)
       .build();
 
@@ -47,15 +58,50 @@ export function useSignalR(callbacks: SignalRCallbacks) {
       setIsConnected(true);
       callbacksRef.current.onReconnected?.();
     });
-    connection.onclose(() => setIsConnected(false));
 
-    connection
-      .start()
-      .then(() => setIsConnected(true))
-      .catch((err) => console.error('SignalR connection failed:', err));
+    connection.onreconnecting(() => setIsConnected(false));
+    connection.onclose(() => {
+      setIsConnected(false);
+      if (!disposed) {
+        resyncAfterStart = true;
+        scheduleStartRetry(60_000);
+      }
+    });
+
+    function scheduleStartRetry(delayMs: number) {
+      window.clearTimeout(startRetryTimer);
+      startRetryTimer = window.setTimeout(startConnection, delayMs);
+    }
+
+    async function startConnection() {
+      if (disposed || connection.state !== signalR.HubConnectionState.Disconnected) {
+        return;
+      }
+
+      try {
+        await connection.start();
+        if (!disposed) {
+          setIsConnected(true);
+          if (resyncAfterStart) {
+            resyncAfterStart = false;
+            callbacksRef.current.onReconnected?.();
+          }
+        }
+      } catch (err) {
+        if (disposed) return;
+        resyncAfterStart = true;
+        setIsConnected(false);
+        console.error('SignalR connection failed; retrying in 60 seconds:', err);
+        scheduleStartRetry(60_000);
+      }
+    }
+
+    void startConnection();
 
     return () => {
-      connection.stop();
+      disposed = true;
+      window.clearTimeout(startRetryTimer);
+      void connection.stop();
     };
   }, []);
 
