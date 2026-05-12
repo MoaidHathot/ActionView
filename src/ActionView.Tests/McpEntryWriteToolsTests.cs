@@ -182,4 +182,114 @@ public class McpEntryWriteToolsTests : IDisposable
 
         Assert.True(doc.RootElement.TryGetProperty("error", out _));
     }
+
+    // --- update_entry ---
+
+    [Fact]
+    public void UpdateEntry_AppliesSuppliedFields()
+    {
+        var entry = IngestEntry("Original Title");
+
+        var result = EntryWriteTools.UpdateEntry(_store, _jsonOptions, entry.Id,
+            """{"title":"New Title","severity":"high","tags":["urgent","prod"]}""");
+        var doc = JsonDocument.Parse(result);
+
+        Assert.True(doc.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal("New Title", doc.RootElement.GetProperty("title").GetString());
+        Assert.Equal("high", doc.RootElement.GetProperty("severity").GetString());
+
+        var fields = doc.RootElement.GetProperty("fieldsUpdated").EnumerateArray()
+            .Select(e => e.GetString()).ToList();
+        Assert.Contains("title", fields);
+        Assert.Contains("severity", fields);
+        Assert.Contains("tags", fields);
+        Assert.DoesNotContain("subtitle", fields);
+
+        // Verify state in store
+        var stored = _store.GetEntry(entry.Id);
+        Assert.NotNull(stored);
+        Assert.Equal("New Title", stored!.Title);
+        Assert.Equal(Severity.High, stored.Severity);
+        Assert.Equal(new[] { "urgent", "prod" }, stored.Tags);
+    }
+
+    [Fact]
+    public void UpdateEntry_OmittedFieldsAreLeftAlone()
+    {
+        var entry = IngestEntry("Keep Me");
+
+        var result = EntryWriteTools.UpdateEntry(_store, _jsonOptions, entry.Id,
+            """{"priority":5}""");
+        var doc = JsonDocument.Parse(result);
+
+        Assert.True(doc.RootElement.GetProperty("success").GetBoolean());
+
+        var fields = doc.RootElement.GetProperty("fieldsUpdated").EnumerateArray()
+            .Select(e => e.GetString()).ToList();
+        Assert.Single(fields);
+        Assert.Contains("priority", fields);
+
+        var stored = _store.GetEntry(entry.Id)!;
+        Assert.Equal("Keep Me", stored.Title);          // unchanged
+        Assert.Equal(Severity.Medium, stored.Severity); // unchanged
+        Assert.Equal(5, stored.Priority);               // changed
+    }
+
+    [Fact]
+    public void UpdateEntry_ExplicitNullLeavesFieldAlone()
+    {
+        // "null" in the JSON should be treated identically to "field omitted".
+        var entry = IngestEntry("Has Title");
+
+        var result = EntryWriteTools.UpdateEntry(_store, _jsonOptions, entry.Id,
+            """{"title":null,"severity":"low"}""");
+        var doc = JsonDocument.Parse(result);
+
+        Assert.True(doc.RootElement.GetProperty("success").GetBoolean());
+
+        var fields = doc.RootElement.GetProperty("fieldsUpdated").EnumerateArray()
+            .Select(e => e.GetString()).ToList();
+        Assert.DoesNotContain("title", fields);
+        Assert.Contains("severity", fields);
+
+        var stored = _store.GetEntry(entry.Id)!;
+        Assert.Equal("Has Title", stored.Title);       // null didn't clobber
+        Assert.Equal(Severity.Low, stored.Severity);
+    }
+
+    [Fact]
+    public void UpdateEntry_ReturnsErrorForUnknownId()
+    {
+        var result = EntryWriteTools.UpdateEntry(_store, _jsonOptions, "nonexistent",
+            """{"title":"x"}""");
+        var doc = JsonDocument.Parse(result);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var error));
+        Assert.Contains("not found", error.GetString());
+    }
+
+    [Fact]
+    public void UpdateEntry_ReturnsErrorForInvalidJson()
+    {
+        var entry = IngestEntry();
+
+        var result = EntryWriteTools.UpdateEntry(_store, _jsonOptions, entry.Id, "not json");
+        var doc = JsonDocument.Parse(result);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out var error));
+        Assert.Contains("Invalid update JSON", error.GetString());
+    }
+
+    [Fact]
+    public void UpdateEntry_CannotUpdateArchivedEntry()
+    {
+        var entry = IngestEntry("Will Be Archived");
+        _store.ArchiveEntry(entry.Id, new EntryOutcome { Action = "Dismissed", Success = true });
+
+        var result = EntryWriteTools.UpdateEntry(_store, _jsonOptions, entry.Id,
+            """{"title":"x"}""");
+        var doc = JsonDocument.Parse(result);
+
+        Assert.True(doc.RootElement.TryGetProperty("error", out _));
+    }
 }

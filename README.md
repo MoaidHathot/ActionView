@@ -365,15 +365,64 @@ Actions define buttons that execute commands when clicked:
 |-------|-------------|
 | `label` | Button text |
 | `style` | `default`, `primary`, `success`, or `danger` |
-| `confirmMessage` | If set, a confirmation dialog is shown before execution |
+| `confirmMessage` | If set, a confirmation dialog (or form heading) is shown before execution |
 | `command.type` | `http` or `cli` |
+| `parameters` | Optional list of inputs the user supplies before the action runs (see below) |
 | `onSuccess` | What to do after successful execution: `archive`, `keep`, or `delete` |
 
-**HTTP commands** support `method`, `url`, `headers`, and `body`. All string values support `{{VAR}}` placeholder substitution.
+**HTTP commands** support `method`, `url`, `headers`, and `body`. All string values support `{{VAR}}` (secrets/env) and `{{param.NAME}}` (runtime user input) placeholder substitution.
 
 **CLI commands** support `program`, `args` (string array), and `workingDirectory`.
 
 Actions can also be placed inside `section` blocks to scope them to a specific part of the entry.
+
+#### Parameterized Actions
+
+Some actions need user input — for example, posting a PR review comment whose draft was written by an AI but should be editable before sending. Declare the inputs as `parameters`:
+
+```json
+{
+  "label": "Post Comment",
+  "style": "primary",
+  "parameters": [
+    {
+      "name": "body",
+      "label": "Comment",
+      "type": "multiline",
+      "default": "Consider making CacheTTL configurable...",
+      "required": true,
+      "helpText": "Edit before posting."
+    }
+  ],
+  "command": {
+    "type": "http",
+    "method": "POST",
+    "url": "https://api.github.com/repos/acme/backend/pulls/482/comments",
+    "headers": { "Authorization": "Bearer {{GITHUB_TOKEN}}" },
+    "body": { "body": "{{param.body}}" }
+  },
+  "onSuccess": "keep"
+}
+```
+
+When `parameters` is present the UI expands an inline form under the button (textarea, select, number, boolean, or single-line text). The user's input is substituted into the command via `{{param.NAME}}` placeholders.
+
+| Parameter field | Description |
+|-----------------|-------------|
+| `name` | Identifier used as `{{param.NAME}}`. Must match `[A-Za-z_][A-Za-z0-9_]*`. |
+| `label` | Field label shown in the form. |
+| `type` | `text`, `multiline`, `select`, `number`, or `boolean`. Defaults to `text`. |
+| `default` | Initial value (e.g. an AI's draft). For numeric/boolean fields the string is parsed. |
+| `options` | Allowed values when `type` is `select`. |
+| `required` | If true, a non-empty value must be supplied before execution. |
+| `placeholder` | Placeholder text inside the input. |
+| `helpText` | Help text shown beneath the input. |
+
+Substitution rules:
+
+* `{{param.NAME}}` is resolved **before** `{{SECRET}}` so user input cannot collide with secret names.
+* Inside a JSON `body`, substitution happens at the string-leaf level — special characters in user input (quotes, backslashes, newlines) are JSON-escaped automatically and cannot break the payload.
+* Drafts are persisted to `localStorage` per `entry+action`, so a SignalR refresh while you're editing won't wipe your work.
 
 ## Data Directory Layout
 

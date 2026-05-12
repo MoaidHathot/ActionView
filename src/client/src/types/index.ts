@@ -7,6 +7,7 @@ export type AlertLevel = 'info' | 'warning' | 'error' | 'success';
 export type ActionStyle = 'default' | 'primary' | 'success' | 'danger';
 export type PostActionBehavior = 'archive' | 'keep' | 'delete';
 export type CommandType = 'http' | 'cli';
+export type ActionParameterType = 'text' | 'multiline' | 'select' | 'number' | 'boolean';
 
 export interface Entry {
   id: string;
@@ -55,9 +56,26 @@ export interface EntryAction {
   style: ActionStyle;
   confirmMessage?: string;
   command: ActionCommand;
+  /**
+   * Optional runtime input fields. When non-empty the UI shows an inline form
+   * (textarea/select/etc.) and posts the values as `{ parameters: { name: value } }`.
+   * Server resolves `{{param.NAME}}` placeholders in the command before secrets.
+   */
+  parameters?: ActionParameter[];
   onSuccess: PostActionBehavior;
   undoCommand?: ActionCommand;
   undoWindowSeconds?: number;
+}
+
+export interface ActionParameter {
+  name: string;
+  label: string;
+  type: ActionParameterType;
+  default?: string;
+  options?: string[];
+  required?: boolean;
+  placeholder?: string;
+  helpText?: string;
 }
 
 export interface ActionCommand {

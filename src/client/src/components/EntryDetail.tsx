@@ -29,10 +29,10 @@ export function EntryDetail({
     setEditing(false);
   }, [entry.id]);
 
-  const handleAction = useCallback(async (actionIndex: number) => {
+  const handleAction = useCallback(async (actionIndex: number, parameters?: Record<string, string>) => {
     try {
       const action = entry.actions[actionIndex];
-      const result = await api.executeAction(entry.id, actionIndex);
+      const result = await api.executeAction(entry.id, actionIndex, parameters);
       setActionResult({ success: result.success, message: result.message ?? '' });
       if (result.success) {
         // If the action has an undo command, show undo toast
@@ -46,15 +46,17 @@ export function EntryDetail({
       }
     } catch (err) {
       setActionResult({ success: false, message: String(err) });
+      throw err;
     }
   }, [entry, onActionExecuted, onUndoCreated, defaultUndoWindow]);
 
-  const handleSectionAction = useCallback(async (sectionIndex: number, actionIndex: number) => {
+  const handleSectionAction = useCallback(async (sectionIndex: number, actionIndex: number, parameters?: Record<string, string>) => {
     try {
-      const result = await api.executeSectionAction(entry.id, sectionIndex, actionIndex);
+      const result = await api.executeSectionAction(entry.id, sectionIndex, actionIndex, parameters);
       setActionResult({ success: result.success, message: result.message ?? '' });
     } catch (err) {
       setActionResult({ success: false, message: String(err) });
+      throw err;
     }
   }, [entry.id]);
 
@@ -170,7 +172,8 @@ export function EntryDetail({
             <ActionButton
               key={i}
               action={action}
-              onClick={() => handleAction(i)}
+              draftKey={`${entry.id}.${i}`}
+              onClick={(parameters) => handleAction(i, parameters)}
             />
           ))}
         </div>

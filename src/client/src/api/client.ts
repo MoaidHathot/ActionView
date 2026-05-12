@@ -44,15 +44,24 @@ export const api = {
       body: JSON.stringify(update),
     }),
 
-  executeAction: (entryId: string, actionIndex: number) =>
+  executeAction: (entryId: string, actionIndex: number, parameters?: Record<string, string>) =>
     fetchJson<ActionExecutionResult>(`${API_BASE}/entries/${entryId}/actions/${actionIndex}`, {
       method: 'POST',
+      body: parameters ? JSON.stringify({ parameters }) : undefined,
     }),
 
-  executeSectionAction: (entryId: string, sectionIndex: number, actionIndex: number) =>
+  executeSectionAction: (
+    entryId: string,
+    sectionIndex: number,
+    actionIndex: number,
+    parameters?: Record<string, string>,
+  ) =>
     fetchJson<ActionExecutionResult>(
       `${API_BASE}/entries/${entryId}/sections/${sectionIndex}/actions/${actionIndex}`,
-      { method: 'POST' }
+      {
+        method: 'POST',
+        body: parameters ? JSON.stringify({ parameters }) : undefined,
+      },
     ),
 
   dismissEntry: (id: string) =>
@@ -81,10 +90,10 @@ export const api = {
       body: JSON.stringify({ ids }),
     }),
 
-  batchAction: (ids: string[], actionLabel: string) =>
+  batchAction: (ids: string[], actionLabel: string, parameters?: Record<string, string>) =>
     fetchJson<BatchResult>(`${API_BASE}/entries/batch/action`, {
       method: 'POST',
-      body: JSON.stringify({ ids, actionLabel }),
+      body: JSON.stringify({ ids, actionLabel, parameters }),
     }),
 
   // --- History ---

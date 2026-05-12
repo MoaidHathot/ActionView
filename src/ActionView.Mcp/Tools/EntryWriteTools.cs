@@ -126,4 +126,58 @@ public sealed class EntryWriteTools
             pinned = entry.Pinned
         }, jsonOptions);
     }
+
+    [McpServerTool(Name = "update_entry", Idempotent = true), Description(
+        "Update fields of an existing active entry in place. " +
+        "Supply a JSON object string with only the fields you want to change; " +
+        "omitted (or null) fields are left untouched. " +
+        "Updatable fields: title, subtitle, severity, tags, content, actions, priority. " +
+        "Identity fields (id, type, source, createdAt) cannot be changed. " +
+        "Use add_entry to create new entries; use update_entry to modify existing ones.")]
+    public static string UpdateEntry(
+        EntryStore entryStore,
+        JsonSerializerOptions jsonOptions,
+        [Description("The entry ID")] string id,
+        [Description("JSON object string with fields to update, e.g. '{\"severity\":\"high\",\"tags\":[\"urgent\"]}'")] string updateJson)
+    {
+        EntryUpdateRequest? update;
+        try
+        {
+            update = JsonSerializer.Deserialize<EntryUpdateRequest>(updateJson, ReadOptions);
+        }
+        catch (JsonException ex)
+        {
+            return JsonSerializer.Serialize(new { error = $"Invalid update JSON: {ex.Message}" }, jsonOptions);
+        }
+
+        if (update is null)
+            return JsonSerializer.Serialize(new { error = "Failed to deserialize update payload" }, jsonOptions);
+
+        // Track which fields the caller actually supplied so the response can confirm what changed.
+        var fieldsUpdated = new List<string>();
+
+        var entry = entryStore.UpdateEntry(id, e =>
+        {
+            if (update.Title is not null) { e.Title = update.Title; fieldsUpdated.Add("title"); }
+            if (update.Subtitle is not null) { e.Subtitle = update.Subtitle; fieldsUpdated.Add("subtitle"); }
+            if (update.Severity.HasValue) { e.Severity = update.Severity.Value; fieldsUpdated.Add("severity"); }
+            if (update.Tags is not null) { e.Tags = update.Tags; fieldsUpdated.Add("tags"); }
+            if (update.Content is not null) { e.Content = update.Content; fieldsUpdated.Add("content"); }
+            if (update.Actions is not null) { e.Actions = update.Actions; fieldsUpdated.Add("actions"); }
+            if (update.Priority.HasValue) { e.Priority = update.Priority.Value; fieldsUpdated.Add("priority"); }
+        });
+
+        if (entry is null)
+            return JsonSerializer.Serialize(new { error = $"Entry not found or not active: {id}" }, jsonOptions);
+
+        return JsonSerializer.Serialize(new
+        {
+            success = true,
+            id = entry.Id,
+            title = entry.Title,
+            type = entry.Type,
+            severity = entry.Severity.ToString().ToLowerInvariant(),
+            fieldsUpdated
+        }, jsonOptions);
+    }
 }

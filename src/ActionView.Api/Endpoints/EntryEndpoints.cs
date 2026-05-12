@@ -108,7 +108,8 @@ public static class EntryEndpoints
 
         // --- Execute entry action ---
         group.MapPost("/{id}/actions/{actionIndex:int}",
-            async (string id, int actionIndex, EntryStore store, ActionExecutor executor,
+            async (string id, int actionIndex, ActionExecutionRequest? request,
+                   EntryStore store, ActionExecutor executor,
                    IHubContext<EntryHub, IEntryHubClient> hubContext) =>
         {
             var entry = store.GetEntry(id);
@@ -119,7 +120,11 @@ public static class EntryEndpoints
 
             var action = entry.Actions[actionIndex];
 
-            var result = await executor.ExecuteAsync(action.Command);
+            var (errors, parameters) = ActionParameterValidator.Validate(action.Parameters, request?.Parameters);
+            if (errors.Count > 0)
+                return Results.BadRequest(new { error = "Invalid parameters", details = errors });
+
+            var result = await executor.ExecuteAsync(action.Command, parameters);
 
             if (result.Success)
             {
@@ -151,7 +156,7 @@ public static class EntryEndpoints
 
         // --- Execute section action ---
         group.MapPost("/{entryId}/sections/{sectionIndex:int}/actions/{actionIndex:int}",
-            async (string entryId, int sectionIndex, int actionIndex,
+            async (string entryId, int sectionIndex, int actionIndex, ActionExecutionRequest? request,
                    EntryStore store, ActionExecutor executor) =>
         {
             var entry = store.GetEntry(entryId);
@@ -166,7 +171,12 @@ public static class EntryEndpoints
                 return Results.BadRequest(new { error = "Invalid action index" });
 
             var action = section.Actions[actionIndex];
-            var result = await executor.ExecuteAsync(action.Command);
+
+            var (errors, parameters) = ActionParameterValidator.Validate(action.Parameters, request?.Parameters);
+            if (errors.Count > 0)
+                return Results.BadRequest(new { error = "Invalid parameters", details = errors });
+
+            var result = await executor.ExecuteAsync(action.Command, parameters);
 
             return Results.Ok(result);
         });
@@ -184,7 +194,8 @@ public static class EntryEndpoints
 
         // --- Undo action (unarchive) ---
         group.MapPost("/{id}/undo",
-            async (string id, EntryStore store, ActionExecutor executor,
+            async (string id, ActionExecutionRequest? request,
+                   EntryStore store, ActionExecutor executor,
                    IHubContext<EntryHub, IEntryHubClient> hubContext) =>
         {
             // Try to find the archived entry to get the undo command info
@@ -193,9 +204,10 @@ public static class EntryEndpoints
 
             // Find the action that was taken and check if it has an undo command
             ActionCommand? undoCommand = null;
+            EntryAction? action = null;
             if (archivedEntry.Outcome is not null)
             {
-                var action = archivedEntry.Actions.FirstOrDefault(a =>
+                action = archivedEntry.Actions.FirstOrDefault(a =>
                     a.Label == archivedEntry.Outcome.Action && a.UndoCommand is not null);
                 undoCommand = action?.UndoCommand;
             }
@@ -203,7 +215,11 @@ public static class EntryEndpoints
             // Execute undo command if present
             if (undoCommand is not null)
             {
-                var undoResult = await executor.ExecuteAsync(undoCommand);
+                var (errors, parameters) = ActionParameterValidator.Validate(action?.Parameters, request?.Parameters);
+                if (errors.Count > 0)
+                    return Results.BadRequest(new { error = "Invalid parameters", details = errors });
+
+                var undoResult = await executor.ExecuteAsync(undoCommand, parameters);
                 if (!undoResult.Success)
                     return Results.BadRequest(new { error = "Undo command failed", message = undoResult.Message });
             }
@@ -290,7 +306,10 @@ public static class EntryEndpoints
                     a.Label.Equals(request.ActionLabel, StringComparison.OrdinalIgnoreCase));
                 if (action is null) { failed++; continue; }
 
-                var result = await executor.ExecuteAsync(action.Command);
+                var (errors, parameters) = ActionParameterValidator.Validate(action.Parameters, request.Parameters);
+                if (errors.Count > 0) { failed++; continue; }
+
+                var result = await executor.ExecuteAsync(action.Command, parameters);
                 if (result.Success)
                 {
                     switch (action.OnSuccess)
@@ -388,17 +407,6 @@ public static class EntryEndpoints
 
 // --- Request DTOs ---
 
-public sealed class EntryUpdateRequest
-{
-    public string? Title { get; set; }
-    public string? Subtitle { get; set; }
-    public Severity? Severity { get; set; }
-    public List<string>? Tags { get; set; }
-    public List<ContentBlock>? Content { get; set; }
-    public List<EntryAction>? Actions { get; set; }
-    public int? Priority { get; set; }
-}
-
 public sealed class BatchIdsRequest
 {
     public List<string> Ids { get; set; } = [];
@@ -408,4 +416,20 @@ public sealed class BatchActionRequest
 {
     public List<string> Ids { get; set; } = [];
     public required string ActionLabel { get; set; }
+
+    /// <summary>
+    /// Parameter values applied to every entry's matching action. The same dict is validated
+    /// per-entry against each action's declared parameters; entries whose action declares
+    /// different parameters will fail validation and be counted as failed.
+    /// </summary>
+    public Dictionary<string, string>? Parameters { get; set; }
+}
+
+/// <summary>
+/// Body of action-execution POSTs. Carries user-supplied parameter values that are validated
+/// against the action's declared <c>parameters</c> before the command is executed.
+/// </summary>
+public sealed class ActionExecutionRequest
+{
+    public Dictionary<string, string>? Parameters { get; set; }
 }

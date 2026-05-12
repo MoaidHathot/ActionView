@@ -18,6 +18,13 @@ public sealed class EntryAction
     /// <summary>The command to execute when the user clicks this action.</summary>
     public required ActionCommand Command { get; set; }
 
+    /// <summary>
+    /// Optional runtime parameters the user supplies before execution. When non-empty the UI
+    /// renders an inline form (textarea/select/etc.) and substitutes <c>{{param.NAME}}</c>
+    /// inside the command's URL, headers, args, working directory and JSON body string leaves.
+    /// </summary>
+    public List<ActionParameter>? Parameters { get; set; }
+
     /// <summary>What to do with the entry after the action succeeds.</summary>
     public PostActionBehavior OnSuccess { get; set; } = PostActionBehavior.Archive;
 

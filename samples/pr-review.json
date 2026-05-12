@@ -44,13 +44,23 @@
         {
           "label": "Post Comment",
           "style": "primary",
-          "confirmMessage": "Post a review comment about the hard-coded TTL on PR #482?",
+          "confirmMessage": "Edit the AI-suggested comment and submit when ready. It will be posted to PR #482.",
+          "parameters": [
+            {
+              "name": "body",
+              "label": "Comment",
+              "type": "multiline",
+              "default": "Consider making CacheTTL configurable via appsettings instead of hard-coding TimeSpan.FromMinutes(5).",
+              "required": true,
+              "helpText": "Edit before posting. Markdown is supported by GitHub."
+            }
+          ],
           "command": {
             "type": "cli",
             "program": "cmd.exe",
             "args": [
               "/c",
-              "echo [GitHub API] POST /repos/acme/backend/pulls/482/comments && echo Status: 201 Created && echo Comment posted: \"Consider making CacheTTL configurable via appsettings instead of hard-coding TimeSpan.FromMinutes(5).\" && echo File: src/Services/UserPreferenceCacheService.cs, Line: 5"
+              "echo [GitHub API] POST /repos/acme/backend/pulls/482/comments && echo Status: 201 Created && echo File: src/Services/UserPreferenceCacheService.cs, Line: 5 && echo Body: \"{{param.body}}\""
             ]
           },
           "onSuccess": "keep"
@@ -82,13 +92,23 @@
     {
       "label": "Approve PR",
       "style": "success",
-      "confirmMessage": "Are you sure you want to approve PR #482?",
+      "confirmMessage": "Approve PR #482? An optional approval message can be included below.",
+      "parameters": [
+        {
+          "name": "message",
+          "label": "Approval Message",
+          "type": "multiline",
+          "default": "LGTM - caching approach looks good. Ship it!",
+          "placeholder": "Optional approval message",
+          "helpText": "Leave blank to approve without a message."
+        }
+      ],
       "command": {
         "type": "cli",
         "program": "cmd.exe",
         "args": [
           "/c",
-          "echo [GitHub API] POST /repos/acme/backend/pulls/482/reviews && echo Status: 200 OK && echo Review submitted: APPROVE && echo Body: \"LGTM - caching approach looks good. Ship it!\""
+          "echo [GitHub API] POST /repos/acme/backend/pulls/482/reviews && echo Status: 200 OK && echo Review submitted: APPROVE && echo Body: \"{{param.message}}\""
         ]
       },
       "onSuccess": "archive"
@@ -96,13 +116,30 @@
     {
       "label": "Request Changes",
       "style": "danger",
-      "confirmMessage": "Are you sure you want to request changes on PR #482?",
+      "confirmMessage": "Request changes on PR #482. A reason is required.",
+      "parameters": [
+        {
+          "name": "reason",
+          "label": "Reason",
+          "type": "multiline",
+          "default": "Please address the cache invalidation race condition and DateTimeOffset serialization concerns.",
+          "required": true
+        },
+        {
+          "name": "severity",
+          "label": "Severity",
+          "type": "select",
+          "options": ["nit", "suggestion", "blocker"],
+          "default": "blocker",
+          "required": true
+        }
+      ],
       "command": {
         "type": "cli",
         "program": "cmd.exe",
         "args": [
           "/c",
-          "echo [GitHub API] POST /repos/acme/backend/pulls/482/reviews && echo Status: 200 OK && echo Review submitted: REQUEST_CHANGES && echo Body: \"Please address the cache invalidation race condition and DateTimeOffset serialization concerns.\""
+          "echo [GitHub API] POST /repos/acme/backend/pulls/482/reviews && echo Status: 200 OK && echo Review submitted: REQUEST_CHANGES && echo Severity: {{param.severity}} && echo Body: \"{{param.reason}}\""
         ]
       },
       "onSuccess": "archive"

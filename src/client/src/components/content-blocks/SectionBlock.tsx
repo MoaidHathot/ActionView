@@ -7,7 +7,7 @@ interface Props {
   block: ContentBlock;
   entryId: string;
   sectionIndex: number;
-  onAction?: (sectionIndex: number, actionIndex: number) => void;
+  onAction?: (sectionIndex: number, actionIndex: number, parameters?: Record<string, string>) => void;
 }
 
 export function SectionBlock({ block, entryId, sectionIndex, onAction }: Props) {
@@ -32,7 +32,8 @@ export function SectionBlock({ block, entryId, sectionIndex, onAction }: Props) 
                 <ActionButton
                   key={actionIdx}
                   action={action}
-                  onClick={() => onAction?.(sectionIndex, actionIdx)}
+                  draftKey={`${entryId}.s${sectionIndex}.${actionIdx}`}
+                  onClick={(parameters) => onAction?.(sectionIndex, actionIdx, parameters)}
                 />
               ))}
             </div>

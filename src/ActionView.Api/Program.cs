@@ -54,6 +54,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 // Register services
 builder.Services.AddSingleton(config);
 builder.Services.AddSingleton<SecretResolver>();
+builder.Services.AddSingleton<ParameterResolver>();
 builder.Services.AddSingleton(sp =>
     new TemplateRegistry(config.DataDirectory, sp.GetRequiredService<ILogger<TemplateRegistry>>()));
 builder.Services.AddSingleton<EntryNormalizer>();

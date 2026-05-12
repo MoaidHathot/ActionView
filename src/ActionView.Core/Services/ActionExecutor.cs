@@ -1,24 +1,30 @@
 using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Text.Json;
 using ActionView.Core.Models;
 using Microsoft.Extensions.Logging;
 
 namespace ActionView.Core.Services;
 
 /// <summary>
-/// Executes action commands (HTTP requests or CLI processes)
-/// defined in entry actions.
+/// Executes action commands (HTTP requests or CLI processes) defined in entry actions.
+/// Substitutes runtime <c>{{param.NAME}}</c> placeholders first, then config/env <c>{{SECRET}}</c>
+/// placeholders, before issuing the request or starting the process.
 /// </summary>
 public sealed class ActionExecutor
 {
+    private readonly ParameterResolver _parameterResolver;
     private readonly SecretResolver _secretResolver;
     private readonly HttpClient _httpClient;
     private readonly ILogger<ActionExecutor> _logger;
 
-    public ActionExecutor(SecretResolver secretResolver, HttpClient httpClient, ILogger<ActionExecutor> logger)
+    public ActionExecutor(
+        ParameterResolver parameterResolver,
+        SecretResolver secretResolver,
+        HttpClient httpClient,
+        ILogger<ActionExecutor> logger)
     {
+        _parameterResolver = parameterResolver;
         _secretResolver = secretResolver;
         _httpClient = httpClient;
         _logger = logger;
@@ -27,17 +33,28 @@ public sealed class ActionExecutor
     /// <summary>
     /// Executes an action command and returns the result.
     /// </summary>
-    public async Task<ActionExecutionResult> ExecuteAsync(ActionCommand command, CancellationToken ct = default)
+    /// <param name="command">Command to execute.</param>
+    /// <param name="parameters">
+    /// Validated parameter values keyed by name (use <see cref="ActionParameterValidator"/> first).
+    /// May be null when the action declares no parameters.
+    /// </param>
+    public async Task<ActionExecutionResult> ExecuteAsync(
+        ActionCommand command,
+        IReadOnlyDictionary<string, string>? parameters = null,
+        CancellationToken ct = default)
     {
         return command.Type switch
         {
-            CommandType.Http => await ExecuteHttpAsync(command, ct),
-            CommandType.Cli => await ExecuteCliAsync(command, ct),
+            CommandType.Http => await ExecuteHttpAsync(command, parameters, ct),
+            CommandType.Cli => await ExecuteCliAsync(command, parameters, ct),
             _ => new ActionExecutionResult { Success = false, Message = $"Unknown command type: {command.Type}" }
         };
     }
 
-    private async Task<ActionExecutionResult> ExecuteHttpAsync(ActionCommand command, CancellationToken ct)
+    private async Task<ActionExecutionResult> ExecuteHttpAsync(
+        ActionCommand command,
+        IReadOnlyDictionary<string, string>? parameters,
+        CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(command.Url))
             return new ActionExecutionResult { Success = false, Message = "HTTP command missing URL" };
@@ -52,15 +69,15 @@ public sealed class ActionExecutor
             _ => HttpMethod.Post
         };
 
-        var url = _secretResolver.Resolve(command.Url);
+        var url = ResolveAll(command.Url, parameters);
         var request = new HttpRequestMessage(method, url);
 
-        // Add headers with secret resolution
+        // Add headers with parameter + secret resolution
         if (command.Headers is not null)
         {
             foreach (var (key, value) in command.Headers)
             {
-                var resolvedValue = _secretResolver.Resolve(value);
+                var resolvedValue = ResolveAll(value, parameters);
 
                 // Handle Authorization header specially
                 if (key.Equals("Authorization", StringComparison.OrdinalIgnoreCase))
@@ -78,10 +95,11 @@ public sealed class ActionExecutor
             }
         }
 
-        // Add body with secret resolution
+        // Body: substitute parameters at the JSON-leaf level (preserves structure and quoting)
+        // and then resolve secrets in the resulting raw JSON.
         if (command.Body is not null)
         {
-            var bodyJson = command.Body.Value.GetRawText();
+            var bodyJson = JsonElementParameterizer.Parameterize(command.Body.Value, _parameterResolver, parameters);
             var resolvedBody = _secretResolver.Resolve(bodyJson);
             request.Content = new StringContent(resolvedBody, Encoding.UTF8, "application/json");
         }
@@ -113,13 +131,16 @@ public sealed class ActionExecutor
         }
     }
 
-    private async Task<ActionExecutionResult> ExecuteCliAsync(ActionCommand command, CancellationToken ct)
+    private async Task<ActionExecutionResult> ExecuteCliAsync(
+        ActionCommand command,
+        IReadOnlyDictionary<string, string>? parameters,
+        CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(command.Program))
             return new ActionExecutionResult { Success = false, Message = "CLI command missing program" };
 
-        var program = _secretResolver.Resolve(command.Program);
-        var args = command.Args?.Select(a => _secretResolver.Resolve(a)).ToList() ?? [];
+        var program = ResolveAll(command.Program, parameters);
+        var args = command.Args?.Select(a => ResolveAll(a, parameters)).ToList() ?? [];
 
         var psi = new ProcessStartInfo
         {
@@ -134,7 +155,7 @@ public sealed class ActionExecutor
             psi.ArgumentList.Add(arg);
 
         if (!string.IsNullOrWhiteSpace(command.WorkingDirectory))
-            psi.WorkingDirectory = _secretResolver.Resolve(command.WorkingDirectory);
+            psi.WorkingDirectory = ResolveAll(command.WorkingDirectory, parameters);
 
         try
         {
@@ -169,4 +190,8 @@ public sealed class ActionExecutor
             };
         }
     }
+
+    /// <summary>Parameters first, then secrets — collisions are impossible thanks to the namespace.</summary>
+    private string ResolveAll(string input, IReadOnlyDictionary<string, string>? parameters)
+        => _secretResolver.Resolve(_parameterResolver.Resolve(input, parameters));
 }

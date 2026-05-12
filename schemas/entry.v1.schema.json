@@ -173,9 +173,14 @@
         },
         "confirmMessage": {
           "type": "string",
-          "description": "Confirmation message shown before executing."
+          "description": "Confirmation message shown before executing. With parameters, displayed above the input form."
         },
         "command": { "$ref": "#/$defs/actionCommand" },
+        "parameters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/actionParameter" },
+          "description": "Optional runtime input fields. When non-empty the UI shows an inline form before executing; values are substituted into the command via {{param.NAME}} placeholders."
+        },
         "onSuccess": {
           "type": "string",
           "enum": ["archive", "keep", "delete"],
@@ -189,6 +194,49 @@
         "undoWindowSeconds": {
           "type": "integer",
           "description": "Seconds the undo option remains available. Falls back to the global default from actionview.json (default 10)."
+        }
+      }
+    },
+    "actionParameter": {
+      "type": "object",
+      "required": ["name", "label"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "Identifier referenced in command strings as {{param.NAME}}."
+        },
+        "label": {
+          "type": "string",
+          "description": "Human-friendly label shown next to the input."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["text", "multiline", "select", "number", "boolean"],
+          "default": "text",
+          "description": "Input field type."
+        },
+        "default": {
+          "type": "string",
+          "description": "Initial value (e.g. an AI's draft comment). For numeric/boolean fields, the string is parsed."
+        },
+        "options": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Allowed values when type is 'select'."
+        },
+        "required": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, a non-empty value must be supplied before execution."
+        },
+        "placeholder": {
+          "type": "string",
+          "description": "Placeholder text for the input."
+        },
+        "helpText": {
+          "type": "string",
+          "description": "Optional help text shown beneath the input."
         }
       }
     },
@@ -208,15 +256,15 @@
         },
         "url": {
           "type": "string",
-          "description": "Target URL for HTTP requests. May contain {{VAR}} placeholders."
+          "description": "Target URL for HTTP requests. May contain {{VAR}} (secrets/env) and {{param.NAME}} (runtime user input) placeholders."
         },
         "headers": {
           "type": "object",
           "additionalProperties": { "type": "string" },
-          "description": "HTTP headers. Values may contain {{VAR}} placeholders."
+          "description": "HTTP headers. Values may contain {{VAR}} and {{param.NAME}} placeholders."
         },
         "body": {
-          "description": "HTTP request body."
+          "description": "HTTP request body. String leaves may contain {{VAR}} and {{param.NAME}} placeholders; values are JSON-escaped on substitution."
         },
         "program": {
           "type": "string",

@@ -659,6 +659,119 @@ body {
   color: var(--danger);
 }
 
+/* ===== Action Parameter Form (inline expansion under a parameterized button) ===== */
+.action-param-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 100%;
+  max-width: 640px;
+}
+
+.action-param-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.action-param-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-heading);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.action-param-confirm-message {
+  font-size: 12px;
+  color: var(--text);
+  padding: 8px 10px;
+  background: var(--bg-hover);
+  border-radius: var(--radius);
+  border-left: 2px solid var(--accent, #4f8cff);
+}
+
+.action-param-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.action-param-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.action-param-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.action-param-required {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.action-param-input,
+.action-param-select,
+.action-param-textarea {
+  background: var(--bg, #0f1117);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-heading);
+  font-size: 14px;
+  padding: 8px 10px;
+  font-family: var(--font);
+  transition: border-color 0.15s;
+}
+
+.action-param-textarea {
+  font-family: var(--font-mono, monospace);
+  resize: vertical;
+  min-height: 96px;
+}
+
+.action-param-input:focus,
+.action-param-select:focus,
+.action-param-textarea:focus {
+  outline: none;
+  border-color: var(--accent, #4f8cff);
+}
+
+.action-param-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.action-param-help {
+  font-size: 11px;
+  color: var(--text-muted, #8b8e98);
+}
+
+.action-param-error {
+  font-size: 12px;
+  color: var(--danger);
+  padding: 4px 0;
+}
+
+.action-param-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 /* ===== Action Result Banner ===== */
 .action-result {
   display: flex;

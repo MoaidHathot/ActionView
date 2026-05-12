@@ -13,7 +13,7 @@ interface BlockRendererProps {
   block: ContentBlock;
   entryId: string;
   sectionIndex?: number;
-  onSectionAction?: (sectionIndex: number, actionIndex: number) => void;
+  onSectionAction?: (sectionIndex: number, actionIndex: number, parameters?: Record<string, string>) => void;
 }
 
 export function BlockRenderer({ block, entryId, sectionIndex, onSectionAction }: BlockRendererProps) {
