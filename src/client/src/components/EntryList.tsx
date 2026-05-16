@@ -2,7 +2,7 @@ import { formatDistanceToNow } from '../utils/time';
 import type { Entry, Severity } from '../types';
 import {
   GitPullRequest, AlertTriangle, Rocket, Zap, Bell,
-  CircleDot, Circle, Pin, ChevronDown, ChevronRight,
+  CircleDot, Circle, Pin, ChevronDown, ChevronRight, X,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -10,6 +10,7 @@ interface Props {
   entries: Entry[];
   selectedId?: string;
   onSelect: (entry: Entry) => void;
+  onDismiss: (id: string) => void;
   // Batch selection
   selectionMode: boolean;
   selectedIds: Set<string>;
@@ -61,7 +62,7 @@ function groupEntries(entries: Entry[]): GroupedEntries[] {
 }
 
 export function EntryList({
-  entries, selectedId, onSelect, selectionMode, selectedIds, onToggleSelect, onSelectAll,
+  entries, selectedId, onSelect, onDismiss, selectionMode, selectedIds, onToggleSelect, onSelectAll,
 }: Props) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
@@ -146,6 +147,20 @@ export function EntryList({
             )}
           </div>
         </div>
+        {!selectionMode && (
+          <button
+            type="button"
+            className="entry-list-item-dismiss"
+            title="Dismiss (d)"
+            aria-label={`Dismiss ${entry.title}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDismiss(entry.id);
+            }}
+          >
+            <X size={14} />
+          </button>
+        )}
       </div>
     );
   };

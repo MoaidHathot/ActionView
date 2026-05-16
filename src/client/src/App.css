@@ -205,6 +205,7 @@ body {
   cursor: pointer;
   border-bottom: 1px solid var(--border);
   transition: background 0.1s;
+  position: relative;
 }
 
 .entry-list-item:hover {
@@ -215,6 +216,42 @@ body {
   background: var(--bg-selected);
   border-left: 2px solid var(--accent);
   padding-left: 14px;
+}
+
+.entry-list-item-dismiss {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.entry-list-item:hover .entry-list-item-dismiss,
+.entry-list-item:focus-within .entry-list-item-dismiss,
+.entry-list-item-dismiss:focus-visible {
+  opacity: 1;
+}
+
+.entry-list-item-dismiss:hover {
+  background: var(--bg-selected);
+  color: var(--text-heading);
+  border-color: var(--border);
+}
+
+.entry-list-item-dismiss:focus-visible {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .entry-list-item-indicator {

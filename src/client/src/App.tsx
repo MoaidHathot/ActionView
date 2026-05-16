@@ -129,9 +129,43 @@ export default function App() {
   }, []);
 
   const handleDismiss = useCallback((id: string) => {
+    // If the dismissed entry was the currently-selected one, auto-advance
+    // to the next entry in the list so the user can keep pressing `d`
+    // (or clicking Dismiss) to clear through the queue. Prefer the next
+    // sibling; fall back to the previous one; null only if the list is
+    // empty afterwards.
+    let nextCandidate: Entry | null = null;
+    if (selectedEntry?.id === id) {
+      const idx = entries.findIndex((e) => e.id === id);
+      if (idx >= 0) {
+        nextCandidate = entries[idx + 1] ?? entries[idx - 1] ?? null;
+      }
+    }
     setEntries((prev) => prev.filter((e) => e.id !== id));
-    setSelectedEntry(null);
-  }, []);
+    if (selectedEntry?.id === id) {
+      if (nextCandidate) {
+        // Re-uses handleSelectEntry which loads the full entry, marks
+        // it viewed, and updates stats — same as a manual click.
+        handleSelectEntry(nextCandidate);
+      } else {
+        setSelectedEntry(null);
+      }
+    }
+  }, [entries, selectedEntry, handleSelectEntry]);
+
+  // Server-driven dismiss: calls the API and then updates local state.
+  // Used by the keyboard shortcut and the inline list-row dismiss button,
+  // both of which need to hit the server (unlike EntryDetail's own
+  // Dismiss button, which already calls the API and then invokes
+  // handleDismiss as a local-cleanup callback).
+  const handleDismissById = useCallback(async (id: string) => {
+    try {
+      await api.dismissEntry(id);
+      handleDismiss(id);
+    } catch (err) {
+      console.error('Dismiss failed:', err);
+    }
+  }, [handleDismiss]);
 
   const handleDelete = useCallback((id: string) => {
     setEntries((prev) => prev.filter((e) => e.id !== id));
@@ -226,7 +260,7 @@ export default function App() {
         }
       }},
       { key: 'd', label: 'd', description: 'Dismiss selected entry', handler: () => {
-        if (selectedEntry) handleDismiss(selectedEntry.id);
+        if (selectedEntry) handleDismissById(selectedEntry.id);
       }},
       { key: 'e', label: 'e', description: 'Edit selected entry', handler: () => {
         // Editing is handled in EntryDetail — this is a hint
@@ -268,7 +302,7 @@ export default function App() {
     ],
     [
       currentIndex, selectByIndex, selectedEntry, selectionMode,
-      handleDismiss, handleEntryUpdated, handleToggleSelect, handleClearSelection,
+      handleDismissById, handleEntryUpdated, handleToggleSelect, handleClearSelection,
       showShortcuts,
     ],
   );
@@ -359,6 +393,7 @@ export default function App() {
                   entries={entries}
                   selectedId={selectedEntry?.id}
                   onSelect={handleSelectEntry}
+                  onDismiss={handleDismissById}
                   selectionMode={selectionMode}
                   selectedIds={selectedIds}
                   onToggleSelect={handleToggleSelect}
