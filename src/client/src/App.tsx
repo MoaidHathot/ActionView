@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Activity, Clock, FileText, Wifi, WifiOff, Rows3 } from 'lucide-react';
+import { Activity, Clock, FileText, Wifi, WifiOff, Rows3, Sun, Moon } from 'lucide-react';
 import type { Entry, DashboardStats, EntryFilters } from './types';
 import type { UndoItem } from './components/UndoToast';
 import { api } from './api/client';
 import { useSignalR } from './hooks/useSignalR';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import type { KeyboardShortcut } from './hooks/useKeyboardShortcuts';
+import { useTheme } from './hooks/useTheme';
 import { EntryList } from './components/EntryList';
 import { EntryDetail } from './components/EntryDetail';
 import { HistoryView } from './components/HistoryView';
@@ -15,6 +16,7 @@ import { BatchActionBar } from './components/BatchActionBar';
 import { ShortcutHelp } from './components/ShortcutHelp';
 import { ToastContainer, useToasts } from './components/ToastContainer';
 import { UndoToastContainer } from './components/UndoToast';
+import 'katex/dist/katex.min.css';
 import './App.css';
 
 type View = 'active' | 'history' | 'templates';
@@ -29,6 +31,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<EntryFilters>({});
   const { toasts, addToast, dismissToast } = useToasts();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   // Batch selection state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -346,6 +349,14 @@ export default function App() {
           </button>
         </div>
         <div className="app-header-right">
+          <button
+            className="icon-btn"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
           <button
             className={`icon-btn ${selectionMode ? 'active' : ''}`}
             onClick={() => {

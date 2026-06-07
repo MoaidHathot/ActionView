@@ -2,12 +2,17 @@
 
 export type Severity = 'low' | 'medium' | 'high' | 'critical';
 export type EntryStatus = 'pending' | 'viewed' | 'archived';
-export type ContentBlockType = 'markdown' | 'code' | 'json' | 'table' | 'keyValue' | 'link' | 'section' | 'divider' | 'alert' | 'image';
+export type ContentBlockType =
+  | 'markdown' | 'code' | 'json' | 'table' | 'keyValue' | 'link'
+  | 'section' | 'divider' | 'alert' | 'image' | 'diff' | 'video'
+  | 'gallery' | 'timeline' | 'tabs' | 'stat' | 'file' | 'chart'
+  | 'diagram' | 'beforeAfter';
 export type AlertLevel = 'info' | 'warning' | 'error' | 'success';
 export type ActionStyle = 'default' | 'primary' | 'success' | 'danger';
 export type PostActionBehavior = 'archive' | 'keep' | 'delete';
 export type CommandType = 'http' | 'cli';
 export type ActionParameterType = 'text' | 'multiline' | 'select' | 'number' | 'boolean';
+export type Trend = 'up' | 'down' | 'flat';
 
 export interface Entry {
   id: string;
@@ -26,33 +31,173 @@ export interface Entry {
   receivedAt?: string;
   viewedAt?: string;
   outcome?: EntryOutcome;
-  // Grouping
   groupId?: string;
   groupLabel?: string;
-  // Priority & Pinning
   pinned: boolean;
   priority: number;
 }
 
+/**
+ * A cell in a TableBlock or a value in a KeyValueBlock. Either a plain
+ * string (the simple case) or a typed object that carries richer rendering
+ * instructions. Producers can emit a status pill, link, copy-to-clipboard
+ * chip, code-formatted span, or markdown inline without shoehorning into
+ * a plain string.
+ */
+export type RichCell =
+  | string
+  | { type: 'text'; value: string; mono?: boolean }
+  | { type: 'link'; url: string; label?: string; icon?: string }
+  | { type: 'status'; level: AlertLevel; label: string }
+  | { type: 'badge'; label: string; color?: string }
+  | { type: 'code'; value: string; language?: string }
+  | { type: 'copy'; value: string; display?: string }
+  | { type: 'markdown'; value: string }
+  | { type: 'image'; url: string; alt?: string };
+
+export interface LinkItem {
+  url: string;
+  label?: string;
+  body?: string;
+  icon?: string;
+}
+
+export interface GalleryImage {
+  url: string;
+  alt?: string;
+  caption?: string;
+  timestampUrl?: string;
+  thumbnail?: string;
+}
+
+export interface ImageAnnotation {
+  shape: 'arrow' | 'box' | 'circle' | 'text';
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  label?: string;
+  level?: AlertLevel;
+}
+
+export interface CodeAnnotation {
+  line: number;
+  level?: AlertLevel;
+  body: string;
+  author?: string;
+}
+
+export interface VideoChapter {
+  at: number;
+  label: string;
+}
+
+export interface TimelineEvent {
+  at: string;
+  label: string;
+  body?: string;
+  level?: AlertLevel;
+  icon?: string;
+}
+
+export interface TabItem {
+  label: string;
+  content?: ContentBlock[];
+  badge?: string;
+}
+
+export interface ChartSeries {
+  name: string;
+  data: number[];
+  color?: string;
+}
+
 export interface ContentBlock {
-  type: ContentBlockType | string; // string for plugin block types
+  type: ContentBlockType | string;
   label?: string;
   body?: unknown;
+
+  // Code / Diff
   language?: string;
   filename?: string;
   highlight?: number[];
+  showLineNumbers?: boolean;
+  wordWrap?: boolean;
+  annotations?: CodeAnnotation[];
+  mode?: string;
+  oldFilename?: string;
+  newFilename?: string;
+
+  // Table
   columns?: string[];
-  rows?: string[][];
-  pairs?: Record<string, string>;
+  rows?: RichCell[][];
+  sortable?: boolean;
+  filterable?: boolean;
+
+  // KeyValue
+  pairs?: Record<string, RichCell>;
+
+  // Section / Tabs
   title?: string;
   content?: ContentBlock[];
   actions?: EntryAction[];
+  defaultCollapsed?: boolean;
+  badge?: string;
+
+  // Alert
   level?: AlertLevel;
+  dismissible?: boolean;
+
+  // Link / Image / Video / File shared
   url?: string;
-  // Image block fields
+  links?: LinkItem[];
+  icon?: string;
+
+  // Image
   alt?: string;
   caption?: string;
   maxWidth?: number;
+  timestampUrl?: string;
+  imageAnnotations?: ImageAnnotation[];
+
+  // Before/after slider
+  beforeUrl?: string;
+  afterUrl?: string;
+  beforeLabel?: string;
+  afterLabel?: string;
+
+  // Gallery
+  images?: GalleryImage[];
+
+  // Video
+  provider?: string;
+  videoId?: string;
+  startTime?: number;
+  endTime?: number;
+  poster?: string;
+  chapters?: VideoChapter[];
+
+  // Timeline
+  events?: TimelineEvent[];
+
+  // Tabs
+  tabs?: TabItem[];
+
+  // Stat
+  value?: string;
+  delta?: string;
+  trend?: Trend;
+  unit?: string;
+  sparkline?: number[];
+
+  // File
+  fileSize?: number;
+  mimeType?: string;
+
+  // Chart
+  chartType?: 'line' | 'bar' | 'area' | 'pie';
+  series?: ChartSeries[];
+  xAxis?: string[];
 }
 
 export interface EntryAction {
@@ -60,11 +205,6 @@ export interface EntryAction {
   style: ActionStyle;
   confirmMessage?: string;
   command: ActionCommand;
-  /**
-   * Optional runtime input fields. When non-empty the UI shows an inline form
-   * (textarea/select/etc.) and posts the values as `{ parameters: { name: value } }`.
-   * Server resolves `{{param.NAME}}` placeholders in the command before secrets.
-   */
   parameters?: ActionParameter[];
   onSuccess: PostActionBehavior;
   undoCommand?: ActionCommand;
@@ -114,7 +254,6 @@ export interface ActionExecutionResult {
   output?: string;
 }
 
-// --- Update request for editing entries ---
 export interface EntryUpdateRequest {
   title?: string;
   subtitle?: string;
@@ -125,7 +264,6 @@ export interface EntryUpdateRequest {
   priority?: number;
 }
 
-// --- Batch request/response types ---
 export interface BatchResult {
   dismissed?: number;
   deleted?: number;
@@ -134,7 +272,6 @@ export interface BatchResult {
   total: number;
 }
 
-// --- Template types ---
 export interface EntryTemplate {
   type: string;
   description?: string;
@@ -164,7 +301,6 @@ export interface ActionTemplateBlock {
   style?: ActionStyle;
 }
 
-// --- Filter state ---
 export interface EntryFilters {
   type?: string;
   severity?: string;

@@ -55,10 +55,10 @@ public class EntryStoreIntegrationTests : IDisposable
                 {
                     Type = ContentBlockType.KeyValue,
                     Label = "Details",
-                    Pairs = new Dictionary<string, string>
+                    Pairs = new Dictionary<string, JsonElement>
                     {
-                        ["Environment"] = "staging",
-                        ["Version"] = "1.2.3"
+                        ["Environment"] = JsonSerializer.SerializeToElement("staging"),
+                        ["Version"] = JsonSerializer.SerializeToElement("1.2.3")
                     }
                 }
             ],

@@ -2,9 +2,12 @@ import { useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import type { ContentBlock } from '../../types';
 import { ImageLightbox } from '../ImageLightbox';
 import { rewriteImageUrl } from '../../utils/imageUrl';
+import 'katex/dist/katex.min.css';
 
 interface Props {
   block: ContentBlock;
@@ -15,15 +18,20 @@ interface LightboxState {
   alt: string;
 }
 
+/**
+ * Markdown content with the full GitHub-flavoured pipeline plus math
+ * (KaTeX). Embedded images render as click-to-enlarge thumbnails using
+ * the shared ImageLightbox; file:// URLs are rewritten to /api/files so
+ * they actually load in the browser.
+ *
+ * Extensions enabled:
+ *   - GFM (tables, task lists `- [ ]`, strikethrough, autolinks)
+ *   - Math (`$inline$` and `$$block$$` rendered via KaTeX)
+ */
 export function MarkdownBlock({ block }: Props) {
   const content = typeof block.body === 'string' ? block.body : String(block.body ?? '');
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
 
-  // We override the default <img> renderer so that:
-  //   1. file:// URLs and bare Windows paths are rewritten to /api/files,
-  //      since browsers refuse to load file:// from an http:// origin.
-  //   2. Images render as fixed-size thumbnails (CSS-driven) and open a
-  //      lightbox modal on click, matching the dedicated `image` block.
   const openLightbox = useCallback((src: string, alt: string) => {
     setLightbox({ src, alt });
   }, []);
@@ -53,7 +61,11 @@ export function MarkdownBlock({ block }: Props) {
   return (
     <div className="block-markdown">
       {block.label && <h4 className="block-label">{block.label}</h4>}
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+        components={components}
+      >
         {content}
       </ReactMarkdown>
       {lightbox && (

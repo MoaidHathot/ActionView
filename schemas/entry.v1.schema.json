@@ -91,7 +91,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "description": "Block type that determines rendering. Built-in types: markdown, code, json, table, keyValue, link, section, divider, alert, image. Custom types are rendered by plugins."
+          "description": "Block type that determines rendering. Built-in types: markdown, code, json, table, keyValue, link, section, divider, alert, image, diff, video, gallery, timeline, tabs, stat, file, chart, diagram, beforeAfter. Custom types are rendered by plugins."
         },
         "label": {
           "type": "string",
@@ -102,16 +102,42 @@
         },
         "language": {
           "type": "string",
-          "description": "Programming language for code block syntax highlighting."
+          "description": "Programming language for code/diff block syntax highlighting."
         },
         "filename": {
           "type": "string",
-          "description": "Filename displayed above code blocks."
+          "description": "Filename displayed above code blocks, also the download name for file blocks."
         },
         "highlight": {
           "type": "array",
           "items": { "type": "integer" },
           "description": "Line numbers to highlight in code blocks."
+        },
+        "showLineNumbers": {
+          "type": "boolean",
+          "description": "Show line numbers in code blocks. Defaults to true."
+        },
+        "wordWrap": {
+          "type": "boolean",
+          "description": "Soft-wrap long lines in code blocks. Defaults to true."
+        },
+        "annotations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/codeAnnotation" },
+          "description": "Per-line annotations on a code block (review-style inline comments)."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["unified", "split"],
+          "description": "Diff display mode. Defaults to 'unified'."
+        },
+        "oldFilename": {
+          "type": "string",
+          "description": "Original filename for diff blocks (left side in split mode)."
+        },
+        "newFilename": {
+          "type": "string",
+          "description": "New filename for diff blocks (right side in split mode)."
         },
         "columns": {
           "type": "array",
@@ -122,18 +148,26 @@
           "type": "array",
           "items": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": { "$ref": "#/$defs/richCell" }
           },
-          "description": "Row data for table blocks."
+          "description": "Row data for table blocks. Each cell may be a plain string or a rich-cell object (link, status, code, copy, badge, markdown, image)."
+        },
+        "sortable": {
+          "type": "boolean",
+          "description": "Table headers become click-to-sort. Defaults to false."
+        },
+        "filterable": {
+          "type": "boolean",
+          "description": "Show a filter/search input above the table. Defaults to false."
         },
         "pairs": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
-          "description": "Key-value pairs for keyValue blocks."
+          "additionalProperties": { "$ref": "#/$defs/richCell" },
+          "description": "Key-value pairs for keyValue blocks. Values may be plain strings or rich-cell objects."
         },
         "title": {
           "type": "string",
-          "description": "Section title."
+          "description": "Section / tab title."
         },
         "content": {
           "type": "array",
@@ -143,31 +177,251 @@
         "actions": {
           "type": "array",
           "items": { "$ref": "#/$defs/entryAction" },
-          "description": "Actions scoped to this section."
+          "description": "Actions scoped to this section or alert."
+        },
+        "defaultCollapsed": {
+          "type": "boolean",
+          "description": "Section starts collapsed. Defaults to false."
+        },
+        "badge": {
+          "type": "string",
+          "description": "Badge text rendered next to a section title (e.g. '11 sources', '5 pending')."
         },
         "level": {
           "type": "string",
           "enum": ["info", "warning", "error", "success"],
           "description": "Alert level for alert blocks."
         },
+        "dismissible": {
+          "type": "boolean",
+          "description": "Whether alerts can be dismissed by the user (persists in localStorage)."
+        },
         "url": {
           "type": "string",
-          "format": "uri",
-          "description": "URL for link and image blocks. Image blocks accept http(s), data:, and file:// URLs (file:// requires the path to be under fileAccess.allowedRoots in actionview.json)."
+          "description": "URL for link, image, video, and file blocks. Image/video blocks accept http(s), data:, and file:// URLs (file:// requires the path to be under fileAccess.allowedRoots in actionview.json)."
+        },
+        "links": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/linkItem" },
+          "description": "Multiple links for link blocks (alternative to single url)."
+        },
+        "icon": {
+          "type": "string",
+          "description": "Optional icon name (Lucide) for link / file / stat blocks."
         },
         "alt": {
           "type": "string",
-          "description": "Alternative text for image blocks. Shown if the image fails to load and used by assistive tech."
+          "description": "Alternative text for image blocks."
         },
         "caption": {
           "type": "string",
-          "description": "Optional caption rendered beneath an image block."
+          "description": "Optional caption for image / gallery / video / chart / diagram blocks."
         },
         "maxWidth": {
           "type": "integer",
           "minimum": 1,
-          "description": "Maximum width (CSS pixels) of the rendered thumbnail for an image block. The lightbox view always uses the full viewport regardless."
+          "description": "Maximum thumbnail width in CSS pixels."
+        },
+        "timestampUrl": {
+          "type": "string",
+          "description": "URL opened when the image is clicked instead of the lightbox (e.g. YouTube ?t=170)."
+        },
+        "imageAnnotations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/imageAnnotation" },
+          "description": "Overlay annotations on an image (arrows, boxes, text)."
+        },
+        "beforeUrl": {
+          "type": "string",
+          "description": "Before-image URL for beforeAfter blocks."
+        },
+        "afterUrl": {
+          "type": "string",
+          "description": "After-image URL for beforeAfter blocks."
+        },
+        "beforeLabel": { "type": "string" },
+        "afterLabel": { "type": "string" },
+        "images": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/galleryImage" },
+          "description": "Images for a gallery block."
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["youtube", "vimeo", "file"],
+          "description": "Video provider for video blocks."
+        },
+        "videoId": {
+          "type": "string",
+          "description": "Provider-specific video ID (YouTube/Vimeo)."
+        },
+        "startTime": {
+          "type": "number",
+          "description": "Start time in seconds (video block clipping)."
+        },
+        "endTime": {
+          "type": "number",
+          "description": "End time in seconds (video block clipping)."
+        },
+        "poster": {
+          "type": "string",
+          "description": "Optional poster image URL for video blocks."
+        },
+        "chapters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/videoChapter" },
+          "description": "Chapter markers for video blocks."
+        },
+        "events": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/timelineEvent" },
+          "description": "Chronological events for a timeline block."
+        },
+        "tabs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/tabItem" },
+          "description": "Tab definitions for a tabs block."
+        },
+        "value": {
+          "type": "string",
+          "description": "Stat block value (big-number display)."
+        },
+        "delta": {
+          "type": "string",
+          "description": "Stat block delta indicator (e.g. '+0.5%', '-12')."
+        },
+        "trend": {
+          "type": "string",
+          "enum": ["up", "down", "flat"],
+          "description": "Stat block delta direction."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Stat block unit suffix (e.g. '%', 'req/s')."
+        },
+        "sparkline": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "Sparkline data points for stat blocks."
+        },
+        "fileSize": {
+          "type": "integer",
+          "description": "File size in bytes for file blocks."
+        },
+        "mimeType": {
+          "type": "string",
+          "description": "MIME type hint for file blocks."
+        },
+        "chartType": {
+          "type": "string",
+          "enum": ["line", "bar", "area", "pie"],
+          "description": "Chart variant."
+        },
+        "series": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/chartSeries" },
+          "description": "Chart data series."
+        },
+        "xAxis": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "X-axis labels (bar/line/area charts)."
         }
+      }
+    },
+    "richCell": {
+      "description": "A table cell or keyValue value. Either a plain string or a typed object.",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "object", "required": ["type", "value"], "properties": { "type": { "const": "text" }, "value": { "type": "string" }, "mono": { "type": "boolean" } } },
+        { "type": "object", "required": ["type", "url"], "properties": { "type": { "const": "link" }, "url": { "type": "string" }, "label": { "type": "string" }, "icon": { "type": "string" } } },
+        { "type": "object", "required": ["type", "level", "label"], "properties": { "type": { "const": "status" }, "level": { "enum": ["info", "warning", "error", "success"] }, "label": { "type": "string" } } },
+        { "type": "object", "required": ["type", "label"], "properties": { "type": { "const": "badge" }, "label": { "type": "string" }, "color": { "type": "string" } } },
+        { "type": "object", "required": ["type", "value"], "properties": { "type": { "const": "code" }, "value": { "type": "string" }, "language": { "type": "string" } } },
+        { "type": "object", "required": ["type", "value"], "properties": { "type": { "const": "copy" }, "value": { "type": "string" }, "display": { "type": "string" } } },
+        { "type": "object", "required": ["type", "value"], "properties": { "type": { "const": "markdown" }, "value": { "type": "string" } } },
+        { "type": "object", "required": ["type", "url"], "properties": { "type": { "const": "image" }, "url": { "type": "string" }, "alt": { "type": "string" } } }
+      ]
+    },
+    "linkItem": {
+      "type": "object",
+      "required": ["url"],
+      "properties": {
+        "url": { "type": "string" },
+        "label": { "type": "string" },
+        "body": { "type": "string" },
+        "icon": { "type": "string" }
+      }
+    },
+    "galleryImage": {
+      "type": "object",
+      "required": ["url"],
+      "properties": {
+        "url": { "type": "string" },
+        "alt": { "type": "string" },
+        "caption": { "type": "string" },
+        "timestampUrl": { "type": "string" },
+        "thumbnail": { "type": "string" }
+      }
+    },
+    "imageAnnotation": {
+      "type": "object",
+      "required": ["shape", "x", "y"],
+      "properties": {
+        "shape": { "enum": ["arrow", "box", "circle", "text"] },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number" },
+        "height": { "type": "number" },
+        "label": { "type": "string" },
+        "level": { "enum": ["info", "warning", "error", "success"] }
+      }
+    },
+    "codeAnnotation": {
+      "type": "object",
+      "required": ["line", "body"],
+      "properties": {
+        "line": { "type": "integer", "minimum": 1 },
+        "level": { "enum": ["info", "warning", "error", "success"] },
+        "body": { "type": "string" },
+        "author": { "type": "string" }
+      }
+    },
+    "videoChapter": {
+      "type": "object",
+      "required": ["at", "label"],
+      "properties": {
+        "at": { "type": "number" },
+        "label": { "type": "string" }
+      }
+    },
+    "timelineEvent": {
+      "type": "object",
+      "required": ["at", "label"],
+      "properties": {
+        "at": { "type": "string" },
+        "label": { "type": "string" },
+        "body": { "type": "string" },
+        "level": { "enum": ["info", "warning", "error", "success"] },
+        "icon": { "type": "string" }
+      }
+    },
+    "tabItem": {
+      "type": "object",
+      "required": ["label"],
+      "properties": {
+        "label": { "type": "string" },
+        "content": { "type": "array", "items": { "$ref": "#/$defs/contentBlock" } },
+        "badge": { "type": "string" }
+      }
+    },
+    "chartSeries": {
+      "type": "object",
+      "required": ["name", "data"],
+      "properties": {
+        "name": { "type": "string" },
+        "data": { "type": "array", "items": { "type": "number" } },
+        "color": { "type": "string" }
       }
     },
     "entryAction": {

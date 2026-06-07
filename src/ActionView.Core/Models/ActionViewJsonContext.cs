@@ -14,6 +14,14 @@ namespace ActionView.Core.Models;
 [JsonSerializable(typeof(ActionExecutionResult))]
 [JsonSerializable(typeof(EntryTemplate))]
 [JsonSerializable(typeof(List<EntryTemplate>))]
+[JsonSerializable(typeof(LinkItem))]
+[JsonSerializable(typeof(GalleryImage))]
+[JsonSerializable(typeof(ImageAnnotation))]
+[JsonSerializable(typeof(CodeAnnotation))]
+[JsonSerializable(typeof(VideoChapter))]
+[JsonSerializable(typeof(TimelineEvent))]
+[JsonSerializable(typeof(TabItem))]
+[JsonSerializable(typeof(ChartSeries))]
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

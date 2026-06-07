@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { ContentBlock } from '../../types';
+import { ImageOff } from 'lucide-react';
+import type { ContentBlock, ImageAnnotation } from '../../types';
 import { ImageLightbox } from '../ImageLightbox';
 import { rewriteImageUrl } from '../../utils/imageUrl';
 
@@ -8,21 +9,13 @@ interface Props {
 }
 
 /**
- * Renders an `image` content block as a clickable thumbnail with an optional
- * caption. Clicking the thumbnail opens a lightbox modal at full size.
+ * Single image rendered as a thumbnail with click-to-enlarge.
  *
- * Source resolution:
- *   - `block.url` is the canonical field; `block.body` (string) is accepted
- *     as a fallback so authors who think of it as the "body" still work.
- *   - file:// URLs and bare Windows paths are routed through /api/files
- *     by `rewriteImageUrl`.
- *
- * Visual fields:
- *   - `block.label` is rendered as a heading above the image (like other blocks).
- *   - `block.alt` is the <img alt> and also the modal's aria-label.
- *   - `block.caption` is rendered beneath the thumbnail and in the lightbox.
- *   - `block.maxWidth` (CSS pixels) clamps the thumbnail width;
- *      defaults to a medium-thumbnail height instead so multi-image rows align.
+ * Capabilities:
+ *   - Lightbox on click (or navigate to `timestampUrl` if set, e.g. YouTube ?t=170)
+ *   - Optional overlay annotations (arrows / boxes / circles / text)
+ *   - Lazy load + loading skeleton + onError fallback
+ *   - Configurable `maxWidth`
  */
 export function ImageBlock({ block }: Props) {
   const rawUrl = block.url ?? (typeof block.body === 'string' ? block.body : '');
@@ -30,6 +23,8 @@ export function ImageBlock({ block }: Props) {
   const alt = block.alt ?? block.label ?? '';
   const caption = block.caption;
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [errored, setErrored] = useState(false);
 
   if (!src) {
     return (
@@ -39,8 +34,14 @@ export function ImageBlock({ block }: Props) {
     );
   }
 
-  // Inline style only when the author asked for a specific max-width;
-  // otherwise we let App.css apply the default medium-thumbnail sizing.
+  const onThumbClick = () => {
+    if (block.timestampUrl) {
+      window.open(block.timestampUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setLightboxOpen(true);
+  };
+
   const style = block.maxWidth ? { maxWidth: `${block.maxWidth}px` } : undefined;
 
   return (
@@ -48,12 +49,32 @@ export function ImageBlock({ block }: Props) {
       {block.label && <h4 className="block-label">{block.label}</h4>}
       <button
         type="button"
-        className="block-image-thumb"
-        onClick={() => setLightboxOpen(true)}
-        title="Click to enlarge"
+        className={`block-image-thumb ${errored ? 'block-image-thumb-errored' : ''}`}
+        onClick={onThumbClick}
+        title={block.timestampUrl ? 'Open source link' : 'Click to enlarge'}
         aria-label={alt ? `Enlarge image: ${alt}` : 'Enlarge image'}
       >
-        <img src={src} alt={alt} style={style} loading="lazy" />
+        <span className="block-image-frame">
+          {!loaded && !errored && <span className="block-image-skeleton" aria-hidden="true" />}
+          {errored ? (
+            <span className="block-image-error">
+              <ImageOff size={20} />
+              <span>Image failed to load</span>
+            </span>
+          ) : (
+            <img
+              src={src}
+              alt={alt}
+              style={style}
+              loading="lazy"
+              onLoad={() => setLoaded(true)}
+              onError={() => setErrored(true)}
+            />
+          )}
+          {loaded && !errored && block.imageAnnotations && block.imageAnnotations.length > 0 && (
+            <AnnotationOverlay annotations={block.imageAnnotations} />
+          )}
+        </span>
       </button>
       {caption && <div className="block-image-caption">{caption}</div>}
       <ImageLightbox
@@ -64,5 +85,62 @@ export function ImageBlock({ block }: Props) {
         onClose={() => setLightboxOpen(false)}
       />
     </div>
+  );
+}
+
+function AnnotationOverlay({ annotations }: { annotations: ImageAnnotation[] }) {
+  return (
+    <span className="image-annotations" aria-hidden="true">
+      {annotations.map((a, i) => <AnnotationMark key={i} annotation={a} />)}
+    </span>
+  );
+}
+
+function AnnotationMark({ annotation }: { annotation: ImageAnnotation }) {
+  const level = annotation.level ?? 'info';
+  const baseStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: `${annotation.x}%`,
+    top: `${annotation.y}%`,
+  };
+
+  if (annotation.shape === 'text') {
+    return (
+      <span className={`image-annotation image-annotation-text image-annotation-${level}`} style={baseStyle}>
+        {annotation.label}
+      </span>
+    );
+  }
+
+  if (annotation.shape === 'arrow') {
+    return (
+      <span
+        className={`image-annotation image-annotation-arrow image-annotation-${level}`}
+        style={baseStyle}
+        title={annotation.label}
+      >
+        \u2192
+        {annotation.label && <span className="image-annotation-arrow-label">{annotation.label}</span>}
+      </span>
+    );
+  }
+
+  // box or circle - need width/height
+  const w = annotation.width ?? 10;
+  const h = annotation.height ?? 10;
+  return (
+    <span
+      className={`image-annotation image-annotation-${annotation.shape} image-annotation-${level}`}
+      style={{
+        ...baseStyle,
+        width: `${w}%`,
+        height: `${h}%`,
+      }}
+      title={annotation.label}
+    >
+      {annotation.label && (
+        <span className="image-annotation-shape-label">{annotation.label}</span>
+      )}
+    </span>
   );
 }

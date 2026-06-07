@@ -208,6 +208,7 @@ The server exposes these endpoints:
 | `GET` | `/api/history/{id}` | Get archived entry detail |
 | `GET` | `/api/stats` | Dashboard statistics |
 | `GET` | `/api/files?path={path}` | Serve a local file referenced by an entry. Gated by `fileAccess.allowedRoots` in `actionview.json`. |
+| `GET` | `/api/entries/{id}/export?format={md\|html\|json}` | Export an entry (active or archived) as Markdown, HTML, or raw JSON for archiving / printing. |
 
 A SignalR hub is available at `/hubs/entries` and broadcasts `EntriesAdded`, `EntryUpdated`, `EntryArchived`, and `EntryDeleted` events.
 
@@ -336,15 +337,25 @@ The `content` array accepts these block types:
 
 | Type | Description | Key Fields |
 |------|-------------|------------|
-| `markdown` | Rendered markdown (GFM); image syntax renders as a click-to-enlarge thumbnail | `body` |
-| `code` | Syntax-highlighted code | `body`, `language`, `filename`, `highlight` (line numbers) |
-| `json` | Collapsible JSON display | `body` |
-| `table` | Data table | `columns`, `rows` |
-| `keyValue` | Key-value grid | `pairs` |
-| `link` | External link | `url`, `body` (description) |
-| `image` | Thumbnail image with click-to-enlarge lightbox | `url`, `alt`, `caption`, `maxWidth` |
-| `section` | Collapsible group with nested blocks | `title`, `content`, `actions` |
-| `alert` | Colored banner | `body`, `level` (`info`, `warning`, `error`, `success`) |
+| `markdown` | GFM markdown with math (KaTeX), task lists, footnotes; embedded images render as click-to-enlarge thumbnails | `body` |
+| `code` | Syntax-highlighted code with copy button, wrap/line-no toggles, and inline per-line annotations | `body`, `language`, `filename`, `highlight`, `annotations` |
+| `diff` | Real unified/split diff view with add/remove gutters and per-hunk collapse | `body` (unified diff), `oldFilename`, `newFilename`, `mode` |
+| `json` | Foldable, syntax-colored JSON tree with copy button | `body` |
+| `table` | Sortable, filterable table with rich cells (link/status/badge/code/copy/markdown/image) | `columns`, `rows`, `sortable`, `filterable` |
+| `keyValue` | Key-value grid with the same rich-cell value types as tables | `pairs` |
+| `link` | One or many external links with optional description body and icon | `url` / `links[]`, `body`, `icon` |
+| `image` | Thumbnail with click-to-enlarge lightbox; supports annotations + timestamp links | `url`, `alt`, `caption`, `maxWidth`, `imageAnnotations`, `timestampUrl` |
+| `gallery` | Grid of images sharing one lightbox carousel with prev/next + zoom | `images[]` |
+| `video` | YouTube / Vimeo / file video with optional clipping and chapter list | `url`, `provider`, `videoId`, `startTime`, `endTime`, `chapters` |
+| `file` | Downloadable attachment via `/api/files` (gated by `fileAccess.allowedRoots`) | `url`, `filename`, `fileSize`, `mimeType` |
+| `timeline` | Vertical timeline of dated events (level + icon + markdown body per event) | `events[]` |
+| `tabs` | Tab strip; each tab carries its own `content[]` of nested blocks | `tabs[]` |
+| `stat` | Big-number stat with optional delta indicator and sparkline | `value`, `delta`, `trend`, `unit`, `sparkline` |
+| `chart` | Line / bar / area / pie chart for monitoring snapshots | `chartType`, `series`, `xAxis` |
+| `diagram` | Mermaid diagram (flowcharts, sequence, gantt) | `body` (Mermaid source) |
+| `beforeAfter` | Image slider revealing before/after via a draggable handle | `beforeUrl`, `afterUrl`, `beforeLabel`, `afterLabel` |
+| `section` | Collapsible group (default-collapsed + badge) with nested blocks | `title`, `content`, `actions`, `defaultCollapsed`, `badge` |
+| `alert` | Colored banner with markdown body, optional dismiss, and inline actions | `body`, `level`, `dismissible`, `actions` |
 | `divider` | Horizontal rule | (no fields) |
 
 ### Actions

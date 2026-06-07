@@ -8,16 +8,28 @@ import { LinkBlock } from './LinkBlock';
 import { SectionBlock } from './SectionBlock';
 import { AlertBlock } from './AlertBlock';
 import { ImageBlock } from './ImageBlock';
+import { DiffBlock } from './DiffBlock';
+import { VideoBlock } from './VideoBlock';
+import { GalleryBlock } from './GalleryBlock';
+import { TimelineBlock } from './TimelineBlock';
+import { TabsBlock } from './TabsBlock';
+import { StatBlock } from './StatBlock';
+import { FileBlock } from './FileBlock';
+import { ChartBlock } from './ChartBlock';
+import { DiagramBlock } from './DiagramBlock';
+import { BeforeAfterBlock } from './BeforeAfterBlock';
 import { PluginBlockWrapper } from './PluginBlockWrapper';
 
 interface BlockRendererProps {
   block: ContentBlock;
   entryId: string;
   sectionIndex?: number;
+  /** Stable key for blocks that persist UI state in localStorage (alert dismiss, etc). */
+  blockKey?: string;
   onSectionAction?: (sectionIndex: number, actionIndex: number, parameters?: Record<string, string>) => void;
 }
 
-export function BlockRenderer({ block, entryId, sectionIndex, onSectionAction }: BlockRendererProps) {
+export function BlockRenderer({ block, entryId, sectionIndex, blockKey, onSectionAction }: BlockRendererProps) {
   switch (block.type) {
     case 'markdown':
       return <MarkdownBlock block={block} />;
@@ -43,9 +55,29 @@ export function BlockRenderer({ block, entryId, sectionIndex, onSectionAction }:
     case 'divider':
       return <hr className="block-divider" />;
     case 'alert':
-      return <AlertBlock block={block} />;
+      return <AlertBlock block={block} entryId={entryId} blockKey={blockKey} />;
     case 'image':
       return <ImageBlock block={block} />;
+    case 'diff':
+      return <DiffBlock block={block} />;
+    case 'video':
+      return <VideoBlock block={block} />;
+    case 'gallery':
+      return <GalleryBlock block={block} />;
+    case 'timeline':
+      return <TimelineBlock block={block} />;
+    case 'tabs':
+      return <TabsBlock block={block} entryId={entryId} />;
+    case 'stat':
+      return <StatBlock block={block} />;
+    case 'file':
+      return <FileBlock block={block} />;
+    case 'chart':
+      return <ChartBlock block={block} />;
+    case 'diagram':
+      return <DiagramBlock block={block} />;
+    case 'beforeAfter':
+      return <BeforeAfterBlock block={block} />;
     default:
       // Unknown block type: delegate to the plugin system
       return <PluginBlockWrapper block={block} blockType={block.type} />;

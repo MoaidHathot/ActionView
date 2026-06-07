@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ActionView.Core.Models;
 using Microsoft.Extensions.Logging;
 
@@ -123,7 +124,7 @@ public sealed class EntryNormalizer
         if (block.Pairs is null || templateBlock.KeyAliases is null)
             return;
 
-        var normalized = new Dictionary<string, string>();
+        var normalized = new Dictionary<string, JsonElement>();
 
         foreach (var (key, value) in block.Pairs)
         {
