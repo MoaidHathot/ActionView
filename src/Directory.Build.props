@@ -1,5 +1,35 @@
 <Project>
   <PropertyGroup>
-    <Version>0.15.0</Version>
+    <Version>0.15.1</Version>
   </PropertyGroup>
+
+  <!--
+    NuGet package metadata shared across every packable project in this repo
+    (ActionView.Api, ActionView.Cli, ActionView.Mcp). Per-project .csproj
+    files still set their own PackageId / Description / ToolCommandName /
+    PackAsTool, but anything that should be uniform (license + readme +
+    project URL) lives here so it stays in sync across packages.
+  -->
+  <PropertyGroup>
+    <PackageLicenseExpression>Unlicense</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/MoaidHathot/ActionView</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MoaidHathot/ActionView</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <!--
+    Pack the repo root README.md into every nupkg's root. Visible: false
+    keeps the file out of build output and IDE solution explorers; Pack +
+    PackagePath put it in the package at the location PackageReadmeFile expects.
+    Same treatment for the LICENSE so it's visible in the package even
+    though PackageLicenseExpression is what NuGet displays.
+
+    Path is relative to each .csproj — every packable project here lives at
+    src/ActionView.Foo/ so the repo root is two directories up.
+  -->
+  <ItemGroup Condition="'$(IsPackable)' == 'true' Or '$(PackAsTool)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)..\README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)..\LICENSE" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
 </Project>
