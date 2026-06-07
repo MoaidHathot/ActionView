@@ -19,6 +19,13 @@ public sealed class AppConfig
     public TemplatesConfig Templates { get; set; } = new();
 
     /// <summary>
+    /// Local-file access settings used by the /api/files endpoint to serve
+    /// images and other assets that entries reference via file:// URLs.
+    /// Ships locked down by default (empty allowlist = no local files served).
+    /// </summary>
+    public FileAccessConfig FileAccess { get; set; } = new();
+
+    /// <summary>
     /// Named secrets that map to environment variable names.
     /// Format: "FRIENDLY_NAME": "env:ENV_VAR_NAME"
     /// Used to resolve {{FRIENDLY_NAME}} in action commands.
@@ -121,4 +128,37 @@ public sealed class TemplatesConfig
     /// Default: false (only top-level .json files are scanned).
     /// </summary>
     public bool Recursive { get; set; }
+}
+
+/// <summary>
+/// Controls which local files the /api/files endpoint will serve.
+///
+/// The endpoint exists so that entries can reference local images
+/// (e.g. <c>file:///C:/path/to/frame.jpg</c> in markdown). Browsers
+/// refuse to load <c>file://</c> URLs from an <c>http://</c> origin,
+/// so the client rewrites them to <c>/api/files?path=...</c>, which
+/// this configuration gates.
+///
+/// Ships locked down: an empty <see cref="AllowedRoots"/> list means
+/// the endpoint serves nothing. Add absolute directory paths to opt
+/// individual trees in.
+/// </summary>
+public sealed class FileAccessConfig
+{
+    /// <summary>
+    /// Absolute directory paths whose contents may be served.
+    /// A requested path is served only if, after canonicalisation
+    /// (full path, link target resolution), it lies underneath one
+    /// of these roots. Paths in this list that are not absolute are
+    /// resolved relative to the config file location, the same way
+    /// <see cref="AppConfig.DataDirectory"/> is resolved.
+    /// </summary>
+    public List<string> AllowedRoots { get; set; } = new();
+
+    /// <summary>
+    /// Maximum file size in bytes that the endpoint will return.
+    /// Files larger than this are rejected with HTTP 413.
+    /// Defaults to 20 MiB.
+    /// </summary>
+    public long MaxFileSizeBytes { get; set; } = 20L * 1024 * 1024;
 }

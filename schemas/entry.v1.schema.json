@@ -91,7 +91,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "description": "Block type that determines rendering. Built-in types: markdown, code, json, table, keyValue, link, section, divider, alert. Custom types are rendered by plugins."
+          "description": "Block type that determines rendering. Built-in types: markdown, code, json, table, keyValue, link, section, divider, alert, image. Custom types are rendered by plugins."
         },
         "label": {
           "type": "string",
@@ -153,7 +153,20 @@
         "url": {
           "type": "string",
           "format": "uri",
-          "description": "URL for link blocks."
+          "description": "URL for link and image blocks. Image blocks accept http(s), data:, and file:// URLs (file:// requires the path to be under fileAccess.allowedRoots in actionview.json)."
+        },
+        "alt": {
+          "type": "string",
+          "description": "Alternative text for image blocks. Shown if the image fails to load and used by assistive tech."
+        },
+        "caption": {
+          "type": "string",
+          "description": "Optional caption rendered beneath an image block."
+        },
+        "maxWidth": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum width (CSS pixels) of the rendered thumbnail for an image block. The lightbox view always uses the full viewport regardless."
         }
       }
     },

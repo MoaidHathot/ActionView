@@ -207,6 +207,7 @@ The server exposes these endpoints:
 | `GET` | `/api/history` | List archived entries (query: `type`, `limit`, `offset`) |
 | `GET` | `/api/history/{id}` | Get archived entry detail |
 | `GET` | `/api/stats` | Dashboard statistics |
+| `GET` | `/api/files?path={path}` | Serve a local file referenced by an entry. Gated by `fileAccess.allowedRoots` in `actionview.json`. |
 
 A SignalR hub is available at `/hubs/entries` and broadcasts `EntriesAdded`, `EntryUpdated`, `EntryArchived`, and `EntryDeleted` events.
 
@@ -223,6 +224,10 @@ ActionView is configured via a `actionview.json` file:
   "secrets": {
     "CI_TOKEN": "env:CI_API_TOKEN",
     "JIRA_TOKEN": "my-literal-token"
+  },
+  "fileAccess": {
+    "allowedRoots": ["C:/temp/Zakira.Replay"],
+    "maxFileSizeBytes": 20971520
   }
 }
 ```
@@ -234,6 +239,8 @@ ActionView is configured via a `actionview.json` file:
 | `dataDirectory` | string | `~/.actionview/` | Root directory containing `inbox/`, `active/`, `archive/`, and `errors/` subdirectories. Relative paths are resolved against the config file location. |
 | `notifications.enabled` | bool | `true` | Enable Windows toast notifications when new entries arrive. |
 | `secrets` | object | `{}` | Key-value map of secrets used in action command placeholders. |
+| `fileAccess.allowedRoots` | string[] | `[]` | Absolute (or config-relative) directory paths whose contents `/api/files` is allowed to serve. Required for `file://` image URLs in entries to load. Empty = no local files served. |
+| `fileAccess.maxFileSizeBytes` | int | `20971520` (20 MiB) | Maximum file size returned by `/api/files`. Larger files return HTTP 413. |
 
 ### Config File Resolution
 
@@ -329,12 +336,13 @@ The `content` array accepts these block types:
 
 | Type | Description | Key Fields |
 |------|-------------|------------|
-| `markdown` | Rendered markdown (GFM) | `body` |
+| `markdown` | Rendered markdown (GFM); image syntax renders as a click-to-enlarge thumbnail | `body` |
 | `code` | Syntax-highlighted code | `body`, `language`, `filename`, `highlight` (line numbers) |
 | `json` | Collapsible JSON display | `body` |
 | `table` | Data table | `columns`, `rows` |
 | `keyValue` | Key-value grid | `pairs` |
 | `link` | External link | `url`, `body` (description) |
+| `image` | Thumbnail image with click-to-enlarge lightbox | `url`, `alt`, `caption`, `maxWidth` |
 | `section` | Collapsible group with nested blocks | `title`, `content`, `actions` |
 | `alert` | Colored banner | `body`, `level` (`info`, `warning`, `error`, `success`) |
 | `divider` | Horizontal rule | (no fields) |

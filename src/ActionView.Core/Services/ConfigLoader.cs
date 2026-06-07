@@ -54,6 +54,20 @@ public sealed class ConfigLoader
                 Path.GetFullPath(Path.Combine(configDir, config.Templates.ExternalDirectory));
         }
 
+        // Resolve relative paths in FileAccess.AllowedRoots against the config
+        // file location, the same way DataDirectory and ExternalDirectory are.
+        // Empty / whitespace entries are dropped.
+        var resolvedRoots = new List<string>(config.FileAccess.AllowedRoots.Count);
+        foreach (var root in config.FileAccess.AllowedRoots)
+        {
+            if (string.IsNullOrWhiteSpace(root)) continue;
+            var resolved = Path.IsPathRooted(root)
+                ? Path.GetFullPath(root)
+                : Path.GetFullPath(Path.Combine(configDir, root));
+            resolvedRoots.Add(resolved);
+        }
+        config.FileAccess.AllowedRoots = resolvedRoots;
+
         EnsureDirectories(config.DataDirectory);
         return config;
     }

@@ -2,7 +2,7 @@
 
 export type Severity = 'low' | 'medium' | 'high' | 'critical';
 export type EntryStatus = 'pending' | 'viewed' | 'archived';
-export type ContentBlockType = 'markdown' | 'code' | 'json' | 'table' | 'keyValue' | 'link' | 'section' | 'divider' | 'alert';
+export type ContentBlockType = 'markdown' | 'code' | 'json' | 'table' | 'keyValue' | 'link' | 'section' | 'divider' | 'alert' | 'image';
 export type AlertLevel = 'info' | 'warning' | 'error' | 'success';
 export type ActionStyle = 'default' | 'primary' | 'success' | 'danger';
 export type PostActionBehavior = 'archive' | 'keep' | 'delete';
@@ -49,6 +49,10 @@ export interface ContentBlock {
   actions?: EntryAction[];
   level?: AlertLevel;
   url?: string;
+  // Image block fields
+  alt?: string;
+  caption?: string;
+  maxWidth?: number;
 }
 
 export interface EntryAction {

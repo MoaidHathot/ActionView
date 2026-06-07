@@ -11,7 +11,7 @@ public sealed class ContentBlock
 {
     /// <summary>
     /// Block type that determines how this block is rendered.
-    /// Supported: markdown, code, json, table, key-value, link, section, divider, alert.
+    /// Supported: markdown, code, json, table, key-value, link, section, divider, alert, image.
     /// </summary>
     public required ContentBlockType Type { get; set; }
 
@@ -27,6 +27,7 @@ public sealed class ContentBlock
     /// - link: the URL
     /// - key-value, table, section: unused (use dedicated fields)
     /// - divider: unused
+    /// - image: unused (use Url for the source)
     /// </summary>
     public JsonElement? Body { get; set; }
 
@@ -73,8 +74,22 @@ public sealed class ContentBlock
 
     // --- Link specific ---
 
-    /// <summary>URL for link blocks.</summary>
+    /// <summary>URL for link blocks and image blocks.</summary>
     public string? Url { get; set; }
+
+    // --- Image specific ---
+
+    /// <summary>Alternative text for image blocks. Shown if the image fails to load and used by assistive tech.</summary>
+    public string? Alt { get; set; }
+
+    /// <summary>Optional caption rendered beneath an image block.</summary>
+    public string? Caption { get; set; }
+
+    /// <summary>
+    /// Maximum width (in CSS pixels) for the rendered thumbnail of an image block.
+    /// The lightbox view always expands to the viewport regardless of this value.
+    /// </summary>
+    public int? MaxWidth { get; set; }
 }
 
 public enum ContentBlockType
@@ -87,7 +102,8 @@ public enum ContentBlockType
     Link,
     Section,
     Divider,
-    Alert
+    Alert,
+    Image
 }
 
 public enum AlertLevel

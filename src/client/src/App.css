@@ -395,6 +395,152 @@ body {
 
 .block-markdown strong { color: var(--text-heading); }
 
+/* Images inside a markdown block: rendered as a thumbnail that opens the
+   shared lightbox on click. Matches the dedicated `image` block's sizing. */
+.block-markdown .markdown-image-thumb {
+  display: inline-block;
+  padding: 0;
+  margin: 8px 8px 8px 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: zoom-in;
+  overflow: hidden;
+  vertical-align: top;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.block-markdown .markdown-image-thumb:hover {
+  border-color: var(--accent);
+}
+.block-markdown .markdown-image-thumb:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.block-markdown .markdown-image-thumb img {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  height: auto;
+  width: auto;
+}
+.block-markdown .markdown-image-missing {
+  display: inline-block;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+/* Dedicated `image` content block. Renders larger than inline markdown
+   images since it's the entire block, not embedded prose. */
+.block-image {
+  margin: 4px 0;
+}
+.block-image-thumb {
+  display: inline-block;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: zoom-in;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.block-image-thumb:hover {
+  border-color: var(--accent);
+}
+.block-image-thumb:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.block-image-thumb img {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  height: auto;
+  width: auto;
+}
+.block-image-caption {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.block-image-missing {
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Shared lightbox overlay used by both the image block and markdown images.
+   Sits above other UI (z-index above .shortcut-overlay). */
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  cursor: zoom-out;
+}
+.lightbox-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 100%;
+  max-height: 100%;
+  cursor: default;
+}
+.lightbox-image {
+  display: block;
+  max-width: min(96vw, 1600px);
+  max-height: 88vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: var(--radius);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+}
+.lightbox-caption {
+  max-width: 96vw;
+  color: #e5e7eb;
+  font-size: 13px;
+  text-align: center;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: var(--radius);
+}
+.lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  color: #f3f4f6;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.lightbox-close:hover {
+  background: rgba(0, 0, 0, 0.9);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+.lightbox-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .block-code {
   border-radius: var(--radius);
   overflow: hidden;

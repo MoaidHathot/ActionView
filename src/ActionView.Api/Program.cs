@@ -55,6 +55,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddSingleton(config);
 builder.Services.AddSingleton<SecretResolver>();
 builder.Services.AddSingleton<ParameterResolver>();
+builder.Services.AddSingleton<FileAccessResolver>();
 builder.Services.AddSingleton(sp =>
     new TemplateRegistry(config.DataDirectory, sp.GetRequiredService<ILogger<TemplateRegistry>>()));
 builder.Services.AddSingleton<EntryNormalizer>();
@@ -110,6 +111,7 @@ else
 app.MapEntryEndpoints();
 app.MapHistoryEndpoints();
 app.MapStatsEndpoints();
+app.MapFileEndpoints();
 app.MapHub<EntryHub>("/hubs/entries");
 
 // SPA fallback: serve index.html for non-API, non-file routes so
