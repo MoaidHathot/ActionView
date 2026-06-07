@@ -41,3 +41,48 @@ export function rewriteImageUrl(url: string | undefined): string {
   }
   return url;
 }
+
+/**
+ * urlTransform for ReactMarkdown that allows the schemes an ActionView
+ * entry might legitimately use for images and links:
+ *
+ *   - http, https        — public web URLs (default-allowed)
+ *   - mailto, tel        — common link schemes (default-allowed)
+ *   - data:              — inline base64 / svg images (entries from
+ *                          orchestrators that embed thumbnails directly)
+ *   - file:              — local files, rewritten by rewriteImageUrl
+ *                          downstream to go through /api/files
+ *   - relative paths     — anything without a scheme is left as-is
+ *
+ * Explicitly blocks `javascript:` (XSS) and any other scheme we don't
+ * recognise. The default ReactMarkdown urlTransform strips `data:` and
+ * `file:` URLs to empty string before our custom `img` component sees
+ * them — that's why entries with inline-base64 or file:// images were
+ * rendering as "[image: missing src]" in 0.16.x.
+ *
+ * See: https://github.com/remarkjs/react-markdown - urlTransform option.
+ */
+export function allowEntryImageUrl(value: string): string {
+  // No scheme? Treat as relative. Same heuristic ReactMarkdown's default
+  // uses: a colon before any `?`, `#`, or `/` means it's a scheme.
+  const colon = value.indexOf(':');
+  if (colon < 0) return value;
+  const slash = value.indexOf('/');
+  const question = value.indexOf('?');
+  const hash = value.indexOf('#');
+  if (
+    (slash > -1 && colon > slash) ||
+    (question > -1 && colon > question) ||
+    (hash > -1 && colon > hash)
+  ) {
+    return value;
+  }
+  const scheme = value.slice(0, colon).toLowerCase();
+  if (ALLOWED_SCHEMES.has(scheme)) return value;
+  return '';
+}
+
+const ALLOWED_SCHEMES = new Set([
+  'http', 'https', 'mailto', 'tel', 'data', 'file', 'irc', 'ircs', 'xmpp',
+]);
+

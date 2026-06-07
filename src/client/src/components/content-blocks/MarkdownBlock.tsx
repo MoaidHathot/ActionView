@@ -6,7 +6,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import type { ContentBlock } from '../../types';
 import { ImageLightbox } from '../ImageLightbox';
-import { rewriteImageUrl } from '../../utils/imageUrl';
+import { rewriteImageUrl, allowEntryImageUrl } from '../../utils/imageUrl';
 import 'katex/dist/katex.min.css';
 
 interface Props {
@@ -64,6 +64,7 @@ export function MarkdownBlock({ block }: Props) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
+        urlTransform={allowEntryImageUrl}
         components={components}
       >
         {content}

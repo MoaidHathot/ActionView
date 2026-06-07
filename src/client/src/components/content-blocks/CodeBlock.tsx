@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ContentBlock, CodeAnnotation, AlertLevel } from '../../types';
 import { CopyButton } from '../CopyButton';
+import { allowEntryImageUrl } from '../../utils/imageUrl';
 
 interface Props {
   block: ContentBlock;
@@ -137,7 +138,7 @@ function CodeAnnotationsOverlay({
               {a.author && <span className="code-annotation-author">{a.author}</span>}
             </div>
             <div className="code-annotation-body">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{a.body}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={allowEntryImageUrl}>{a.body}</ReactMarkdown>
             </div>
           </div>
         )),

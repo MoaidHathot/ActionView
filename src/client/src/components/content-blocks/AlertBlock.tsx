@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ContentBlock } from '../../types';
 import { ActionButton } from '../ActionButton';
+import { allowEntryImageUrl } from '../../utils/imageUrl';
 
 interface Props {
   block: ContentBlock;
@@ -59,7 +60,7 @@ export function AlertBlock({ block, entryId, blockKey, onAction }: Props) {
         {heading && <div className="alert-heading">{heading}</div>}
         {message && (
           <div className="alert-message">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={allowEntryImageUrl}>{message}</ReactMarkdown>
           </div>
         )}
         {block.actions && block.actions.length > 0 && (

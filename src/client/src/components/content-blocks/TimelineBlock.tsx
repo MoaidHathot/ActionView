@@ -2,6 +2,7 @@ import { Info, AlertTriangle, AlertCircle, CheckCircle, Circle } from 'lucide-re
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ContentBlock, TimelineEvent, AlertLevel } from '../../types';
+import { allowEntryImageUrl } from '../../utils/imageUrl';
 
 interface Props {
   block: ContentBlock;
@@ -45,7 +46,7 @@ function TimelineRow({ event, isLast }: { event: TimelineEvent; isLast: boolean 
         </div>
         {event.body && (
           <div className="timeline-body">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{event.body}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={allowEntryImageUrl}>{event.body}</ReactMarkdown>
           </div>
         )}
       </div>

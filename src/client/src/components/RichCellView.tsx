@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import type { RichCell } from '../types';
 import { CopyButton } from './CopyButton';
-import { rewriteImageUrl } from '../utils/imageUrl';
+import { rewriteImageUrl, allowEntryImageUrl } from '../utils/imageUrl';
 
 interface Props {
   cell: RichCell;
@@ -96,6 +96,7 @@ export function RichCellView({ cell, inline = true }: Props) {
         <span className="rich-cell rich-cell-markdown">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
+            urlTransform={allowEntryImageUrl}
             components={inline ? INLINE_MARKDOWN_COMPONENTS : undefined}
           >
             {cell.value}
