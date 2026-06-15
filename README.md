@@ -75,8 +75,10 @@ The dashboard is served at `http://localhost:5000`. In development mode, Vite ru
 
 The dashboard provides:
 
-- **Active view** -- all pending entries, sorted by severity then date, with real-time updates via SignalR.
-- **History view** -- archived entries with outcomes.
+- **Active view** -- all pending entries, ordered by pinned → priority → severity → date (or a sort field/direction you choose), with real-time updates via SignalR.
+- **Saved views** -- named filter presets (by tag and/or type) that split the feed into lanes such as Work and Personal. Configure them in `actionview.json` or manage them from the UI (add, rename, change icon/tags, reorder, delete); each pill shows a live count, and an always-present **All** view shows everything.
+- **Filtering & sort** -- filter by type, severity, source, tags (with **Any/All** matching), and free-text search; sort by created/priority/severity/title, ascending or descending. Tags appear on each row and are click-to-filter.
+- **History view** -- archived entries with outcomes, the same saved views / filters / sort, and a paginated **Load more**.
 - **Detail panel** -- rendered content blocks (markdown, code with syntax highlighting, tables, JSON, key-value pairs, alerts, links) and action buttons.
 - **Live indicators** -- connection status, unread badges.
 
@@ -89,7 +91,7 @@ actionview [command] [options] --config path/to/actionview.json
 | Command | Description |
 |---------|-------------|
 | `add [-f <file>] [-j <json>]` | Add a JSON entry to the inbox (accepts file, inline JSON, or stdin) |
-| `list [--type <type>] [--severity <level>]` | List active entries in a table |
+| `list [--type] [--severity] [--source] [--search] [--tags] [--tag-mode any\|all] [--sort created\|priority\|severity\|title] [--dir asc\|desc] [--view <id\|name>]` | List active entries in a table |
 | `dismiss <id>` | Archive an entry (supports partial ID matching) |
 | `delete <id> [-f\|--force]` | Permanently delete an entry |
 | `pin <id>` | Toggle pin on an active entry |
@@ -149,7 +151,7 @@ Or with `dnx` (no prior install needed):
 
 | Tool | Mode | Description |
 |------|------|-------------|
-| `list_entries` | read | List active entries with optional filters (type, severity, source, search) |
+| `list_entries` | read | List active entries with optional filters (type, severity, source, tags, `tagMode` any/all, search, `view`) and sort (`sort`, `dir`) |
 | `get_entry` | read | Get a single entry by ID (supports partial ID match) |
 | `list_templates` | read | List all registered templates |
 | `get_template` | read | Get a template's full definition |
@@ -198,15 +200,19 @@ The server exposes these endpoints:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/entries` | List active entries (query: `type`, `severity`) |
+| `GET` | `/api/entries` | List active entries (query: `type`, `severity`, `source`, `tags`, `tagMode`, `search`, `sort`, `dir`) |
 | `GET` | `/api/entries/{id}` | Get entry detail (marks as viewed) |
 | `POST` | `/api/entries/{id}/actions/{actionIndex}` | Execute an entry action |
 | `POST` | `/api/entries/{entryId}/sections/{sectionIndex}/actions/{actionIndex}` | Execute a section action |
 | `POST` | `/api/entries/{id}/dismiss` | Dismiss (archive) an entry |
 | `DELETE` | `/api/entries/{id}` | Permanently delete an entry |
-| `GET` | `/api/history` | List archived entries (query: `type`, `limit`, `offset`) |
+| `GET` | `/api/history` | List archived entries (query: `type`, `severity`, `source`, `tags`, `tagMode`, `search`, `sort`, `dir`, `limit`, `offset`) |
 | `GET` | `/api/history/{id}` | Get archived entry detail |
 | `GET` | `/api/stats` | Dashboard statistics |
+| `GET` | `/api/views` | List saved views |
+| `PUT` | `/api/views` | Replace the saved views and persist them back to `actionview.json` |
+| `GET` | `/api/views/counts` | Active-entry counts per view (drives the pill badges) |
+| `GET` | `/api/config` | Client-facing config slice (e.g. the default `tagMatchMode`) |
 | `GET` | `/api/files?path={path}` | Serve a local file referenced by an entry. Gated by `fileAccess.allowedRoots` in `actionview.json`. |
 | `GET` | `/api/entries/{id}/export?format={md\|html\|json}` | Export an entry (active or archived) as Markdown, HTML, or raw JSON for archiving / printing. |
 
@@ -219,6 +225,12 @@ ActionView is configured via a `actionview.json` file:
 ```json
 {
   "dataDirectory": "data",
+  "tagMatchMode": "any",
+  "views": [
+    { "id": "work", "name": "Work", "icon": "briefcase", "tags": ["work"] },
+    { "id": "personal", "name": "Personal", "icon": "user", "tags": ["personal"] },
+    { "id": "deploys", "name": "Deploys", "icon": "rocket", "type": "deploy" }
+  ],
   "notifications": {
     "enabled": false
   },
@@ -238,6 +250,8 @@ ActionView is configured via a `actionview.json` file:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `dataDirectory` | string | `~/.actionview/` | Root directory containing `inbox/`, `active/`, `archive/`, and `errors/` subdirectories. Relative paths are resolved against the config file location. |
+| `tagMatchMode` | `"any"` \| `"all"` | `any` | Default combine mode for multi-tag filters: `any` (OR) or `all` (AND). A per-view `tagMatch` and the dashboard's Any/All toggle override it. |
+| `views` | object[] | `[]` | Saved filter presets ("views"). Each: `id`, `name`, optional `icon` (Lucide name), `type`, `tags` (string[]), and `tagMatch` (`any`/`all`). Editable from the dashboard, which persists changes back to this file. The built-in **All** view is always present and not stored here. |
 | `notifications.enabled` | bool | `true` | Enable Windows toast notifications when new entries arrive. |
 | `secrets` | object | `{}` | Key-value map of secrets used in action command placeholders. |
 | `fileAccess.allowedRoots` | string[] | `[]` | Absolute (or config-relative) directory paths whose contents `/api/files` is allowed to serve. Required for `file://` image URLs in entries to load. Empty = no local files served. |
