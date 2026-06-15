@@ -62,7 +62,19 @@ export function useViews() {
     [views],
   );
 
-  return { views, createView, deleteView };
+  // Replaces the entire view list (used by the manage modal for edit/reorder).
+  const replaceViews = useCallback(async (next: SavedView[]): Promise<SavedView[] | undefined> => {
+    try {
+      const saved = await api.saveViews(next);
+      setViews(saved);
+      return saved;
+    } catch (err) {
+      console.error('Failed to save views:', err);
+      return undefined;
+    }
+  }, []);
+
+  return { views, createView, deleteView, replaceViews };
 }
 
 /**

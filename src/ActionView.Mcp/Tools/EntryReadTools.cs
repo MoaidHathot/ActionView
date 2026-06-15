@@ -11,36 +11,28 @@ public sealed class EntryReadTools
 {
     [McpServerTool(Name = "list_entries", ReadOnly = true), Description(
         "List active entries in the ActionView review queue. " +
-        "Returns entries sorted by pinned status, priority, severity, and creation date. " +
-        "All filter parameters are optional.")]
+        "Returns entries sorted by pinned status, priority, severity, and creation date " +
+        "unless an explicit sort is given. All parameters are optional.")]
     public static string ListEntries(
         EntryStore entryStore,
+        AppConfig config,
         JsonSerializerOptions jsonOptions,
         [Description("Filter by entry type (e.g., 'pr-review', 'deploy', 'incident')")] string? type = null,
         [Description("Filter by severity: low, medium, high, critical")] string? severity = null,
         [Description("Filter by source system name")] string? source = null,
-        [Description("Search in title, subtitle, source, and tags")] string? search = null)
+        [Description("Filter by tags (comma-separated)")] string? tags = null,
+        [Description("Tag match mode: 'any' (OR) or 'all' (AND). Defaults to the server config.")] string? tagMode = null,
+        [Description("Search in title, subtitle, source, type, and tags")] string? search = null,
+        [Description("Apply a saved view by id or name (supplies type + tags)")] string? view = null,
+        [Description("Sort field: created, priority, severity, title")] string? sort = null,
+        [Description("Sort direction: asc or desc")] string? dir = null)
     {
-        var entries = entryStore.GetActiveEntries().ToList();
+        var criteria = EntryFiltering.ResolveCriteria(
+            config.Views, config.TagMatchMode, view, type, severity, source, tags, tagMode, search);
 
-        if (!string.IsNullOrWhiteSpace(type))
-            entries = entries.Where(e => e.Type.Equals(type, StringComparison.OrdinalIgnoreCase)).ToList();
-
-        if (!string.IsNullOrWhiteSpace(severity) && Enum.TryParse<Severity>(severity, true, out var sev))
-            entries = entries.Where(e => e.Severity == sev).ToList();
-
-        if (!string.IsNullOrWhiteSpace(source))
-            entries = entries.Where(e => e.Source.Equals(source, StringComparison.OrdinalIgnoreCase)).ToList();
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            entries = entries.Where(e =>
-                e.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                (e.Subtitle?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                e.Source.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                e.Tags.Any(t => t.Contains(search, StringComparison.OrdinalIgnoreCase))
-            ).ToList();
-        }
+        var entries = EntryQuery.RunActive(
+            entryStore.GetActiveEntries(), criteria,
+            EntrySorting.TryParseField(sort), EntrySorting.ParseDirection(dir));
 
         return JsonSerializer.Serialize(new { count = entries.Count, entries }, jsonOptions);
     }

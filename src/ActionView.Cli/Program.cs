@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Invocation;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ActionView.Core.Models;
@@ -191,13 +192,36 @@ var typeFilter = new Option<string?>("--type", "Filter by entry type");
 var severityFilter = new Option<string?>("--severity", "Filter by severity (low, medium, high, critical)");
 var sourceFilter = new Option<string?>("--source", "Filter by source");
 var searchFilter = new Option<string?>("--search", "Search in title, subtitle, source, tags");
+var tagsFilter = new Option<string?>("--tags", "Filter by tags (comma-separated)");
+var tagModeFilter = new Option<string?>("--tag-mode", "Tag match mode: any (OR) or all (AND)");
+var sortOption = new Option<string?>("--sort", "Sort field: created, priority, severity, title");
+var dirOption = new Option<string?>("--dir", "Sort direction: asc or desc");
+var viewOption = new Option<string?>("--view", "Apply a saved view by id or name");
 listCommand.AddOption(typeFilter);
 listCommand.AddOption(severityFilter);
 listCommand.AddOption(sourceFilter);
 listCommand.AddOption(searchFilter);
+listCommand.AddOption(tagsFilter);
+listCommand.AddOption(tagModeFilter);
+listCommand.AddOption(sortOption);
+listCommand.AddOption(dirOption);
+listCommand.AddOption(viewOption);
 
-listCommand.SetHandler((string? configPath, string? type, string? severity, string? source, string? search) =>
+// Uses an InvocationContext handler because the option count exceeds the
+// strongly-typed SetHandler overloads.
+listCommand.SetHandler((InvocationContext ctx) =>
 {
+    var configPath = ctx.ParseResult.GetValueForOption(configOption);
+    var type = ctx.ParseResult.GetValueForOption(typeFilter);
+    var severity = ctx.ParseResult.GetValueForOption(severityFilter);
+    var source = ctx.ParseResult.GetValueForOption(sourceFilter);
+    var search = ctx.ParseResult.GetValueForOption(searchFilter);
+    var tags = ctx.ParseResult.GetValueForOption(tagsFilter);
+    var tagMode = ctx.ParseResult.GetValueForOption(tagModeFilter);
+    var sortField = ctx.ParseResult.GetValueForOption(sortOption);
+    var sortDir = ctx.ParseResult.GetValueForOption(dirOption);
+    var view = ctx.ParseResult.GetValueForOption(viewOption);
+
     var config = ConfigLoader.Load(configPath);
     var activeDir = Path.Combine(config.DataDirectory, "active");
 
@@ -223,35 +247,15 @@ listCommand.SetHandler((string? configPath, string? type, string? severity, stri
         }
     }
 
-    // Apply filters
-    if (!string.IsNullOrWhiteSpace(type))
-        entries = entries.Where(e => e.Type.Equals(type, StringComparison.OrdinalIgnoreCase)).ToList();
+    var criteria = EntryFiltering.ResolveCriteria(
+        config.Views, config.TagMatchMode, view,
+        type, severity, source, tags, tagMode, search);
 
-    if (!string.IsNullOrWhiteSpace(severity) && Enum.TryParse<Severity>(severity, true, out var sev))
-        entries = entries.Where(e => e.Severity == sev).ToList();
+    var results = EntryQuery.RunActive(
+        entries, criteria,
+        EntrySorting.TryParseField(sortField), EntrySorting.ParseDirection(sortDir));
 
-    if (!string.IsNullOrWhiteSpace(source))
-        entries = entries.Where(e => e.Source.Equals(source, StringComparison.OrdinalIgnoreCase)).ToList();
-
-    if (!string.IsNullOrWhiteSpace(search))
-    {
-        entries = entries.Where(e =>
-            e.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-            (e.Subtitle?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) ||
-            e.Source.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-            e.Tags.Any(t => t.Contains(search, StringComparison.OrdinalIgnoreCase))
-        ).ToList();
-    }
-
-    // Sort: pinned first, then priority, then severity desc, then created desc
-    entries = entries
-        .OrderByDescending(e => e.Pinned)
-        .ThenByDescending(e => e.Priority)
-        .ThenByDescending(e => e.Severity)
-        .ThenByDescending(e => e.CreatedAt)
-        .ToList();
-
-    if (entries.Count == 0)
+    if (results.Count == 0)
     {
         Console.WriteLine("No active entries.");
         return;
@@ -260,7 +264,7 @@ listCommand.SetHandler((string? configPath, string? type, string? severity, stri
     Console.WriteLine($"{"ID",-34} {"Sev",-10} {"Status",-8} {"Type",-16} {"Title"}");
     Console.WriteLine(new string('-', 100));
 
-    foreach (var entry in entries)
+    foreach (var entry in results)
     {
         var id = entry.Id.Length > 32 ? entry.Id[..32] : entry.Id;
         var title = entry.Title.Length > 40 ? entry.Title[..37] + "..." : entry.Title;
@@ -269,8 +273,8 @@ listCommand.SetHandler((string? configPath, string? type, string? severity, stri
     }
 
     Console.WriteLine();
-    Console.WriteLine($"Total: {entries.Count} active entries");
-}, configOption, typeFilter, severityFilter, sourceFilter, searchFilter);
+    Console.WriteLine($"Total: {results.Count} active entries");
+});
 
 rootCommand.AddCommand(listCommand);
 

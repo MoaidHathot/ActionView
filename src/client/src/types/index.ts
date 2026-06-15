@@ -327,6 +327,12 @@ export interface ClientConfig {
   tagMatchMode: TagMatchMode;
 }
 
+/** Active-entry counts: total plus a per-view breakdown keyed by view id. */
+export interface ViewCounts {
+  all: number;
+  counts: Record<string, number>;
+}
+
 /**
  * A saved filter preset ("view") that groups the active feed into lanes
  * (e.g. Work vs. Personal). Mirrors the C# SavedView model. The always-present

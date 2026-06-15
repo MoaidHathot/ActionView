@@ -31,6 +31,19 @@ public static class EntrySorting
         };
 
     /// <summary>
+    /// The canonical active-feed order: pinned first, then priority, severity,
+    /// and creation time (all descending). Single source of truth shared by the
+    /// store, the API, and the CLI.
+    /// </summary>
+    public static List<Entry> Default(IEnumerable<Entry> entries) =>
+        entries
+            .OrderByDescending(e => e.Pinned)
+            .ThenByDescending(e => e.Priority)
+            .ThenByDescending(e => e.Severity)
+            .ThenByDescending(e => e.CreatedAt)
+            .ToList();
+
+    /// <summary>
     /// Orders entries by <paramref name="field"/>/<paramref name="dir"/>. When
     /// <paramref name="pinnedFirst"/> is true, pinned entries float to the top
     /// regardless of the chosen field. A stable id tie-breaker keeps ordering

@@ -1,6 +1,6 @@
 import type {
   Entry, ActionExecutionResult, DashboardStats, EntryUpdateRequest,
-  BatchResult, EntryTemplate, EntryFilters, SavedView, SortOption, ClientConfig,
+  BatchResult, EntryTemplate, EntryFilters, SavedView, SortOption, ClientConfig, ViewCounts,
 } from '../types';
 
 const API_BASE = '/api';
@@ -154,6 +154,10 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(views),
     }),
+
+  // Active-entry counts per view (for pill badges).
+  getViewCounts: () =>
+    fetchJson<ViewCounts>(`${API_BASE}/views/counts`),
 
   // --- Server config (read-only slice the dashboard mirrors) ---
 

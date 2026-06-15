@@ -13,34 +13,13 @@ public static class HistoryEndpoints
             string? type, string? severity, string? source, string? tags, string? search,
             string? tagMode, string? sort, string? dir, int? limit, int? offset) =>
         {
-            var sortField = EntrySorting.TryParseField(sort);
-            var sortDir = EntrySorting.ParseDirection(dir);
-            var entries = store.GetArchivedEntries(type, limit ?? 50, offset ?? 0, sortField, sortDir);
+            var criteria = EntryFiltering.ParseCriteria(
+                type, severity, source, tags, tagMode, search,
+                config.TagMatchMode, includeOutcomeInSearch: true);
 
-            if (!string.IsNullOrWhiteSpace(severity) && Enum.TryParse<Severity>(severity, true, out var sev))
-                entries = entries.Where(e => e.Severity == sev).ToList();
-
-            if (!string.IsNullOrWhiteSpace(source))
-                entries = entries.Where(e => e.Source.Equals(source, StringComparison.OrdinalIgnoreCase)).ToList();
-
-            if (!string.IsNullOrWhiteSpace(tags))
-            {
-                var tagList = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                var mode = EntryFiltering.ParseTagMode(tagMode, config.TagMatchMode);
-                entries = entries.Where(e => EntryFiltering.MatchesTags(e, tagList, mode)).ToList();
-            }
-
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                entries = entries.Where(e =>
-                    e.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                    (e.Subtitle?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                    e.Source.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                    e.Type.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                    e.Tags.Any(t => t.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
-                    (e.Outcome?.Action.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
-                ).ToList();
-            }
+            var entries = store.GetArchivedEntries(
+                criteria, limit ?? 50, offset ?? 0,
+                EntrySorting.TryParseField(sort), EntrySorting.ParseDirection(dir));
 
             return Results.Ok(entries);
         });

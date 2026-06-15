@@ -12,6 +12,7 @@ public class McpEntryReadToolsTests : IDisposable
     private readonly string _tempDir;
     private readonly EntryStore _store;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly AppConfig _config = new();
 
     private static readonly JsonSerializerOptions WriteOptions = new()
     {
@@ -59,7 +60,7 @@ public class McpEntryReadToolsTests : IDisposable
         IngestEntry("Entry 1");
         IngestEntry("Entry 2");
 
-        var result = EntryReadTools.ListEntries(_store, _jsonOptions);
+        var result = EntryReadTools.ListEntries(_store, _config, _jsonOptions);
         var doc = JsonDocument.Parse(result);
 
         Assert.Equal(2, doc.RootElement.GetProperty("count").GetInt32());
@@ -72,7 +73,7 @@ public class McpEntryReadToolsTests : IDisposable
         IngestEntry("PR Review", type: "pr-review");
         IngestEntry("Deploy", type: "deploy");
 
-        var result = EntryReadTools.ListEntries(_store, _jsonOptions, type: "pr-review");
+        var result = EntryReadTools.ListEntries(_store, _config, _jsonOptions, type: "pr-review");
         var doc = JsonDocument.Parse(result);
 
         Assert.Equal(1, doc.RootElement.GetProperty("count").GetInt32());
@@ -86,7 +87,7 @@ public class McpEntryReadToolsTests : IDisposable
         IngestEntry("Low Entry", severity: Severity.Low);
         IngestEntry("High Entry", severity: Severity.High);
 
-        var result = EntryReadTools.ListEntries(_store, _jsonOptions, severity: "high");
+        var result = EntryReadTools.ListEntries(_store, _config, _jsonOptions, severity: "high");
         var doc = JsonDocument.Parse(result);
 
         Assert.Equal(1, doc.RootElement.GetProperty("count").GetInt32());
@@ -99,7 +100,7 @@ public class McpEntryReadToolsTests : IDisposable
     {
         IngestEntry("Entry 1");
 
-        var result = EntryReadTools.ListEntries(_store, _jsonOptions, source: "unit-test");
+        var result = EntryReadTools.ListEntries(_store, _config, _jsonOptions, source: "unit-test");
         var doc = JsonDocument.Parse(result);
 
         Assert.Equal(1, doc.RootElement.GetProperty("count").GetInt32());
@@ -111,7 +112,7 @@ public class McpEntryReadToolsTests : IDisposable
         IngestEntry("Important PR Review");
         IngestEntry("Deploy Ready");
 
-        var result = EntryReadTools.ListEntries(_store, _jsonOptions, search: "PR Review");
+        var result = EntryReadTools.ListEntries(_store, _config, _jsonOptions, search: "PR Review");
         var doc = JsonDocument.Parse(result);
 
         Assert.Equal(1, doc.RootElement.GetProperty("count").GetInt32());
@@ -120,7 +121,7 @@ public class McpEntryReadToolsTests : IDisposable
     [Fact]
     public void ListEntries_ReturnsEmptyWhenNoEntries()
     {
-        var result = EntryReadTools.ListEntries(_store, _jsonOptions);
+        var result = EntryReadTools.ListEntries(_store, _config, _jsonOptions);
         var doc = JsonDocument.Parse(result);
 
         Assert.Equal(0, doc.RootElement.GetProperty("count").GetInt32());

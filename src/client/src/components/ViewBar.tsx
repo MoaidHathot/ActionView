@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Plus, X, Check } from 'lucide-react';
-import type { EntryFilters, SavedView } from '../types';
+import { Plus, X, Check, Settings } from 'lucide-react';
+import type { EntryFilters, SavedView, ViewCounts } from '../types';
 import type { NewView } from '../hooks/useViews';
 import { ALL_VIEW_ID } from '../utils/views';
 import { renderIcon, VIEW_ICON_NAMES } from '../utils/icons';
+import { ManageViewsModal } from './ManageViewsModal';
 
 interface Props {
   views: SavedView[];
@@ -13,6 +14,8 @@ interface Props {
   onApplyView: (view: SavedView) => void;
   onCreate: (view: NewView) => void;
   onDelete: (id: string) => void;
+  counts?: ViewCounts | null;
+  onSaveViews?: (views: SavedView[]) => Promise<unknown> | void;
 }
 
 function describeFilters(filters: EntryFilters): string {
@@ -35,11 +38,12 @@ function describeView(view: SavedView): string {
  * new named view (with an optional icon). The "All" pill clears the view.
  */
 export function ViewBar({
-  views, activeId, currentFilters, onApplyAll, onApplyView, onCreate, onDelete,
+  views, activeId, currentFilters, onApplyAll, onApplyView, onCreate, onDelete, counts, onSaveViews,
 }: Props) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('');
+  const [managing, setManaging] = useState(false);
 
   const cancelAdd = () => {
     setAdding(false);
@@ -63,6 +67,8 @@ export function ViewBar({
     cancelAdd();
   };
 
+  const allCount = counts?.all;
+
   return (
     <div className="view-bar">
       <button
@@ -71,9 +77,11 @@ export function ViewBar({
         title="Show all entries"
       >
         All
+        {allCount != null && allCount > 0 && <span className="view-pill-count">{allCount}</span>}
       </button>
 
       {views.map((view) => {
+        const count = counts?.counts[view.id];
         return (
           <span
             key={view.id}
@@ -86,6 +94,7 @@ export function ViewBar({
             >
               {renderIcon(view.icon, 12)}
               {view.name}
+              {count != null && count > 0 && <span className="view-pill-count">{count}</span>}
             </button>
             <button
               className="view-pill-delete"
@@ -155,6 +164,25 @@ export function ViewBar({
         >
           <Plus size={13} />
         </button>
+      )}
+
+      {onSaveViews && views.length > 0 && (
+        <button
+          className="view-manage-btn"
+          onClick={() => setManaging(true)}
+          title="Manage views"
+          aria-label="Manage views"
+        >
+          <Settings size={13} />
+        </button>
+      )}
+
+      {managing && onSaveViews && (
+        <ManageViewsModal
+          views={views}
+          onClose={() => setManaging(false)}
+          onSave={onSaveViews}
+        />
       )}
     </div>
   );

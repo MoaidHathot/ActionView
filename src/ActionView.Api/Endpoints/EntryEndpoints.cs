@@ -11,45 +11,17 @@ public static class EntryEndpoints
     {
         var group = app.MapGroup("/api/entries");
 
-        // --- List active entries with filtering ---
+        // --- List active entries with filtering + optional sort ---
         group.MapGet("/", (EntryStore store, AppConfig config,
             string? type, string? severity, string? source, string? tags, string? search,
             string? tagMode, string? sort, string? dir) =>
         {
-            var entries = store.GetActiveEntries().ToList();
+            var criteria = EntryFiltering.ParseCriteria(
+                type, severity, source, tags, tagMode, search, config.TagMatchMode);
 
-            if (!string.IsNullOrWhiteSpace(type))
-                entries = entries.Where(e => e.Type.Equals(type, StringComparison.OrdinalIgnoreCase)).ToList();
-
-            if (!string.IsNullOrWhiteSpace(severity) && Enum.TryParse<Severity>(severity, true, out var sev))
-                entries = entries.Where(e => e.Severity == sev).ToList();
-
-            if (!string.IsNullOrWhiteSpace(source))
-                entries = entries.Where(e => e.Source.Equals(source, StringComparison.OrdinalIgnoreCase)).ToList();
-
-            if (!string.IsNullOrWhiteSpace(tags))
-            {
-                var tagList = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                var mode = EntryFiltering.ParseTagMode(tagMode, config.TagMatchMode);
-                entries = entries.Where(e => EntryFiltering.MatchesTags(e, tagList, mode)).ToList();
-            }
-
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                entries = entries.Where(e =>
-                    e.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                    (e.Subtitle?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                    e.Source.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                    e.Type.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                    e.Tags.Any(t => t.Contains(search, StringComparison.OrdinalIgnoreCase))
-                ).ToList();
-            }
-
-            // Optional re-sort (pinned entries still float to the top). Absent a
-            // sort field, the store's canonical order is preserved.
-            var sortField = EntrySorting.TryParseField(sort);
-            if (sortField is not null)
-                entries = EntrySorting.Sort(entries, sortField.Value, EntrySorting.ParseDirection(dir), pinnedFirst: true);
+            var entries = EntryQuery.RunActive(
+                store.GetActiveEntries(), criteria,
+                EntrySorting.TryParseField(sort), EntrySorting.ParseDirection(dir));
 
             return Results.Ok(entries);
         });

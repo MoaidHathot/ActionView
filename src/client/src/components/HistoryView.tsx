@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Clock, CheckCircle, XCircle } from 'lucide-react';
-import type { Entry, EntryFilters, SavedView, SortOption, TagMatchMode } from '../types';
+import type { Entry, EntryFilters, SavedView, SortOption, TagMatchMode, ViewCounts } from '../types';
 import { api } from '../api/client';
 import { formatDistanceToNow } from '../utils/time';
 import { BlockRenderer } from './content-blocks/BlockRenderer';
@@ -13,14 +13,19 @@ interface Props {
   createView: (partial: NewView) => Promise<SavedView | undefined>;
   deleteView: (id: string) => Promise<void>;
   defaultTagMode: TagMatchMode;
+  counts?: ViewCounts | null;
+  replaceViews: (views: SavedView[]) => Promise<SavedView[] | undefined>;
 }
 
 const MAX_VISIBLE_TAGS = 4;
+const PAGE_SIZE = 50;
 
-export function HistoryView({ views, createView, deleteView, defaultTagMode }: Props) {
+export function HistoryView({ views, createView, deleteView, defaultTagMode, counts, replaceViews }: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [filters, setFilters] = useState<EntryFilters>({});
   const [sort, setSort] = useState<SortOption>({ field: 'default', direction: 'desc' });
 
@@ -35,21 +40,25 @@ export function HistoryView({ views, createView, deleteView, defaultTagMode }: P
     [entries],
   );
 
-  const loadHistory = useCallback(async () => {
-    setLoading(true);
+  const loadPage = useCallback(async (offset: number, append: boolean) => {
+    if (append) setLoadingMore(true);
+    else setLoading(true);
     try {
-      const data = await api.getHistory(filters, 50, 0, sort);
-      setEntries(data);
+      const data = await api.getHistory(filters, PAGE_SIZE, offset, sort);
+      setEntries((prev) => (append ? [...prev, ...data] : data));
+      setHasMore(data.length === PAGE_SIZE);
     } catch (err) {
       console.error('Failed to load history:', err);
     } finally {
-      setLoading(false);
+      if (append) setLoadingMore(false);
+      else setLoading(false);
     }
   }, [filters, sort]);
 
+  // Reload the first page whenever filters or sort change.
   useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
+    loadPage(0, false);
+  }, [loadPage]);
 
   return (
     <div className="history-view">
@@ -62,6 +71,8 @@ export function HistoryView({ views, createView, deleteView, defaultTagMode }: P
           onApplyView={binding.onApplyView}
           onCreate={binding.onCreate}
           onDelete={binding.onDelete}
+          counts={counts}
+          onSaveViews={replaceViews}
         />
         <FilterBar
           filters={filters}
@@ -80,51 +91,63 @@ export function HistoryView({ views, createView, deleteView, defaultTagMode }: P
             <p>No history yet</p>
           </div>
         ) : (
-          entries.map((entry) => (
-            <div
-              key={entry.id}
-              className={`entry-list-item history-item ${selectedEntry?.id === entry.id ? 'selected' : ''}`}
-              onClick={() => setSelectedEntry(entry)}
-            >
-              <div className="entry-list-item-indicator">
-                {entry.outcome?.success ? (
-                  <CheckCircle size={14} className="outcome-success" />
-                ) : (
-                  <XCircle size={14} className="outcome-failed" />
-                )}
-              </div>
-              <div className="entry-list-item-content">
-                <div className="entry-list-item-title">{entry.title}</div>
-                <div className="entry-list-item-meta">
-                  <span className="outcome-action">{entry.outcome?.action}</span>
-                  <span className="entry-time">
-                    {entry.outcome?.timestamp
-                      ? formatDistanceToNow(entry.outcome.timestamp)
-                      : formatDistanceToNow(entry.createdAt)}
-                  </span>
+          <>
+            {entries.map((entry) => (
+              <div
+                key={entry.id}
+                className={`entry-list-item history-item ${selectedEntry?.id === entry.id ? 'selected' : ''}`}
+                onClick={() => setSelectedEntry(entry)}
+              >
+                <div className="entry-list-item-indicator">
+                  {entry.outcome?.success ? (
+                    <CheckCircle size={14} className="outcome-success" />
+                  ) : (
+                    <XCircle size={14} className="outcome-failed" />
+                  )}
                 </div>
-                {entry.tags.length > 0 && (
-                  <div className="entry-list-item-tags">
-                    {entry.tags.slice(0, MAX_VISIBLE_TAGS).map((tag) => (
-                      <span
-                        key={tag}
-                        className="entry-tag clickable"
-                        title={`Filter by "${tag}"`}
-                        onClick={(e) => { e.stopPropagation(); binding.onTagClick(tag); }}
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                    {entry.tags.length > MAX_VISIBLE_TAGS && (
-                      <span className="entry-tag-more" title={entry.tags.slice(MAX_VISIBLE_TAGS).join(', ')}>
-                        +{entry.tags.length - MAX_VISIBLE_TAGS}
-                      </span>
-                    )}
+                <div className="entry-list-item-content">
+                  <div className="entry-list-item-title">{entry.title}</div>
+                  <div className="entry-list-item-meta">
+                    <span className="outcome-action">{entry.outcome?.action}</span>
+                    <span className="entry-time">
+                      {entry.outcome?.timestamp
+                        ? formatDistanceToNow(entry.outcome.timestamp)
+                        : formatDistanceToNow(entry.createdAt)}
+                    </span>
                   </div>
-                )}
+                  {entry.tags.length > 0 && (
+                    <div className="entry-list-item-tags">
+                      {entry.tags.slice(0, MAX_VISIBLE_TAGS).map((tag) => (
+                        <span
+                          key={tag}
+                          className="entry-tag clickable"
+                          title={`Filter by "${tag}"`}
+                          onClick={(e) => { e.stopPropagation(); binding.onTagClick(tag); }}
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                      {entry.tags.length > MAX_VISIBLE_TAGS && (
+                        <span className="entry-tag-more" title={entry.tags.slice(MAX_VISIBLE_TAGS).join(', ')}>
+                          +{entry.tags.length - MAX_VISIBLE_TAGS}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))
+            ))}
+            {hasMore && (
+              <button
+                type="button"
+                className="history-load-more"
+                onClick={() => loadPage(entries.length, true)}
+                disabled={loadingMore}
+              >
+                {loadingMore ? 'Loading\u2026' : 'Load more'}
+              </button>
+            )}
+          </>
         )}
       </div>
 

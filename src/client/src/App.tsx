@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Activity, Clock, FileText, Wifi, WifiOff, Rows3, Sun, Moon } from 'lucide-react';
-import type { Entry, DashboardStats, EntryFilters, SortOption, ClientConfig } from './types';
+import type { Entry, DashboardStats, EntryFilters, SortOption, ClientConfig, ViewCounts } from './types';
 import type { UndoItem } from './components/UndoToast';
 import { api } from './api/client';
 import { useSignalR } from './hooks/useSignalR';
@@ -34,7 +34,8 @@ export default function App() {
   const [filters, setFilters] = useState<EntryFilters>({});
   const [sort, setSort] = useState<SortOption>({ field: 'default', direction: 'desc' });
   const [clientConfig, setClientConfig] = useState<ClientConfig | null>(null);
-  const { views, createView, deleteView } = useViews();
+  const [viewCounts, setViewCounts] = useState<ViewCounts | null>(null);
+  const { views, createView, deleteView, replaceViews } = useViews();
   const { toasts, addToast, dismissToast } = useToasts();
   const { theme, toggle: toggleTheme } = useTheme();
 
@@ -102,6 +103,13 @@ export default function App() {
       .then(setClientConfig)
       .catch((err) => console.error('Failed to load config:', err));
   }, []);
+
+  // Refresh per-view counts whenever the active set changes (load, SignalR add/archive/delete).
+  useEffect(() => {
+    api.getViewCounts()
+      .then(setViewCounts)
+      .catch((err) => console.error('Failed to load view counts:', err));
+  }, [entries]);
 
   const { isConnected } = useSignalR({
     onEntriesAdded: (newEntries) => {
@@ -406,6 +414,8 @@ export default function App() {
                 onApplyView={viewBinding.onApplyView}
                 onCreate={viewBinding.onCreate}
                 onDelete={viewBinding.onDelete}
+                counts={viewCounts}
+                onSaveViews={replaceViews}
               />
               <FilterBar
                 filters={filters}
@@ -466,6 +476,8 @@ export default function App() {
             createView={createView}
             deleteView={deleteView}
             defaultTagMode={clientConfig?.tagMatchMode ?? 'any'}
+            counts={viewCounts}
+            replaceViews={replaceViews}
           />
         ) : (
           <TemplatesView />

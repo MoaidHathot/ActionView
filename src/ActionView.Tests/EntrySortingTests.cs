@@ -98,4 +98,22 @@ public class EntrySortingTests
         // Equal priority -> stable id tie-breaker (ordinal ascending).
         Assert.Equal(["a", "b", "c"], sorted.Select(e => e.Id));
     }
+
+    [Fact]
+    public void Default_OrdersByPinnedThenPriorityThenSeverityThenCreated()
+    {
+        var t0 = DateTimeOffset.UnixEpoch;
+        var entries = new[]
+        {
+            Make("a", priority: 1, severity: Severity.Low, created: t0),
+            Make("pinned", priority: 0, pinned: true, created: t0),
+            Make("b", priority: 1, severity: Severity.High, created: t0),
+            Make("c", priority: 5, created: t0),
+        };
+
+        var sorted = EntrySorting.Default(entries).Select(e => e.Id);
+
+        // pinned first; then priority desc (c=5); within priority 1, severity desc (b High > a Low).
+        Assert.Equal(["pinned", "c", "b", "a"], sorted);
+    }
 }

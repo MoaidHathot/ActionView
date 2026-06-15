@@ -359,16 +359,8 @@ public sealed class EntryStore : IDisposable
         return entry;
     }
 
-    /// <summary>Get all active (non-archived) entries.</summary>
-    public IReadOnlyList<Entry> GetActiveEntries()
-    {
-        return _activeCache.Values
-            .OrderByDescending(e => e.Pinned)
-            .ThenByDescending(e => e.Priority)
-            .ThenByDescending(e => e.Severity)
-            .ThenByDescending(e => e.CreatedAt)
-            .ToList();
-    }
+    /// <summary>Get all active (non-archived) entries in the canonical order.</summary>
+    public IReadOnlyList<Entry> GetActiveEntries() => EntrySorting.Default(_activeCache.Values);
 
     /// <summary>Get a single active entry by ID.</summary>
     public Entry? GetEntry(string id)
@@ -430,9 +422,9 @@ public sealed class EntryStore : IDisposable
         return true;
     }
 
-    /// <summary>Get archived entries, optionally filtered by type and re-sorted.</summary>
+    /// <summary>Get archived entries matching <paramref name="criteria"/>, sorted and paginated.</summary>
     public List<Entry> GetArchivedEntries(
-        string? type = null, int limit = 50, int offset = 0,
+        FilterCriteria criteria, int limit = 50, int offset = 0,
         EntrySortField? sortField = null, SortDirection sortDir = SortDirection.Descending)
     {
         if (!Directory.Exists(ArchiveDir)) return [];
@@ -445,10 +437,7 @@ public sealed class EntryStore : IDisposable
                 var json = File.ReadAllText(file);
                 var entry = JsonSerializer.Deserialize<Entry>(json, ReadOptions);
                 if (entry is not null)
-                {
-                    if (type is null || entry.Type.Equals(type, StringComparison.OrdinalIgnoreCase))
-                        entries.Add(entry);
-                }
+                    entries.Add(entry);
             }
             catch (Exception ex)
             {
@@ -456,18 +445,17 @@ public sealed class EntryStore : IDisposable
             }
         }
 
-        // Default history order is most-recent-outcome first; an explicit sort
-        // field overrides it. Sorting happens before pagination so the chosen
-        // order is global, not just within a page.
-        var sorted = sortField is null
-            ? entries.OrderByDescending(e => e.Outcome?.Timestamp ?? e.CreatedAt).ToList()
-            : EntrySorting.Sort(entries, sortField.Value, sortDir, pinnedFirst: false);
-
-        return sorted
+        // Filter -> sort -> paginate, so filters apply to the entire archive
+        // rather than just the first page.
+        return EntryQuery.RunHistory(entries, criteria, sortField, sortDir)
             .Skip(offset)
             .Take(limit)
             .ToList();
     }
+
+    /// <summary>Convenience overload: archived entries optionally filtered by type only.</summary>
+    public List<Entry> GetArchivedEntries(string? type = null, int limit = 50, int offset = 0)
+        => GetArchivedEntries(new FilterCriteria { Type = type }, limit, offset);
 
     /// <summary>Get a single archived entry by ID.</summary>
     public Entry? GetArchivedEntry(string id)

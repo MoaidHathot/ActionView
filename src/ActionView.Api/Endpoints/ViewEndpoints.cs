@@ -26,5 +26,26 @@ public static class ViewEndpoints
                 return Results.Problem("Failed to persist views: " + ex.Message);
             }
         });
+
+        // --- Active-entry counts per view (drives the pill badges) ---
+        group.MapGet("/counts", (ViewStore store, EntryStore entryStore, AppConfig config) =>
+        {
+            var active = entryStore.GetActiveEntries();
+            var counts = new Dictionary<string, int>();
+            foreach (var view in store.GetViews())
+            {
+                var criteria = EntryFiltering.CriteriaForView(view, config.TagMatchMode);
+                counts[view.Id] = EntryFiltering.Apply(active, criteria).Count();
+            }
+
+            return Results.Ok(new ViewCountsResponse { All = active.Count, Counts = counts });
+        });
     }
+}
+
+/// <summary>Active-entry counts: total plus a per-view breakdown keyed by view id.</summary>
+public sealed class ViewCountsResponse
+{
+    public int All { get; set; }
+    public Dictionary<string, int> Counts { get; set; } = [];
 }
