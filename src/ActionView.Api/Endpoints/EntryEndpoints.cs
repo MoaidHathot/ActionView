@@ -12,7 +12,9 @@ public static class EntryEndpoints
         var group = app.MapGroup("/api/entries");
 
         // --- List active entries with filtering ---
-        group.MapGet("/", (EntryStore store, string? type, string? severity, string? source, string? tags, string? search) =>
+        group.MapGet("/", (EntryStore store, AppConfig config,
+            string? type, string? severity, string? source, string? tags, string? search,
+            string? tagMode, string? sort, string? dir) =>
         {
             var entries = store.GetActiveEntries().ToList();
 
@@ -28,7 +30,8 @@ public static class EntryEndpoints
             if (!string.IsNullOrWhiteSpace(tags))
             {
                 var tagList = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                entries = entries.Where(e => tagList.Any(t => e.Tags.Contains(t, StringComparer.OrdinalIgnoreCase))).ToList();
+                var mode = EntryFiltering.ParseTagMode(tagMode, config.TagMatchMode);
+                entries = entries.Where(e => EntryFiltering.MatchesTags(e, tagList, mode)).ToList();
             }
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -41,6 +44,12 @@ public static class EntryEndpoints
                     e.Tags.Any(t => t.Contains(search, StringComparison.OrdinalIgnoreCase))
                 ).ToList();
             }
+
+            // Optional re-sort (pinned entries still float to the top). Absent a
+            // sort field, the store's canonical order is preserved.
+            var sortField = EntrySorting.TryParseField(sort);
+            if (sortField is not null)
+                entries = EntrySorting.Sort(entries, sortField.Value, EntrySorting.ParseDirection(dir), pinnedFirst: true);
 
             return Results.Ok(entries);
         });

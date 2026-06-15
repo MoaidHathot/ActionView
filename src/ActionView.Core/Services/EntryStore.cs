@@ -430,8 +430,10 @@ public sealed class EntryStore : IDisposable
         return true;
     }
 
-    /// <summary>Get archived entries, optionally filtered by type.</summary>
-    public List<Entry> GetArchivedEntries(string? type = null, int limit = 50, int offset = 0)
+    /// <summary>Get archived entries, optionally filtered by type and re-sorted.</summary>
+    public List<Entry> GetArchivedEntries(
+        string? type = null, int limit = 50, int offset = 0,
+        EntrySortField? sortField = null, SortDirection sortDir = SortDirection.Descending)
     {
         if (!Directory.Exists(ArchiveDir)) return [];
 
@@ -454,8 +456,14 @@ public sealed class EntryStore : IDisposable
             }
         }
 
-        return entries
-            .OrderByDescending(e => e.Outcome?.Timestamp ?? e.CreatedAt)
+        // Default history order is most-recent-outcome first; an explicit sort
+        // field overrides it. Sorting happens before pagination so the chosen
+        // order is global, not just within a page.
+        var sorted = sortField is null
+            ? entries.OrderByDescending(e => e.Outcome?.Timestamp ?? e.CreatedAt).ToList()
+            : EntrySorting.Sort(entries, sortField.Value, sortDir, pinnedFirst: false);
+
+        return sorted
             .Skip(offset)
             .Take(limit)
             .ToList();

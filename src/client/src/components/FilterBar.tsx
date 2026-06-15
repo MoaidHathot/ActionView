@@ -1,15 +1,21 @@
 import { useState } from 'react';
 import { Search, X, Filter } from 'lucide-react';
-import type { EntryFilters } from '../types';
+import type { EntryFilters, SortOption, TagMatchMode } from '../types';
+import { SortControl } from './SortControl';
 
 interface Props {
   filters: EntryFilters;
   onChange: (filters: EntryFilters) => void;
   types: string[];
   sources: string[];
+  defaultTagMode?: TagMatchMode;
+  sort?: SortOption;
+  onSortChange?: (sort: SortOption) => void;
 }
 
-export function FilterBar({ filters, onChange, types, sources }: Props) {
+export function FilterBar({
+  filters, onChange, types, sources, defaultTagMode = 'any', sort, onSortChange,
+}: Props) {
   const [expanded, setExpanded] = useState(false);
   const hasFilters = !!(filters.type || filters.severity || filters.source || filters.tags || filters.search);
 
@@ -20,6 +26,10 @@ export function FilterBar({ filters, onChange, types, sources }: Props) {
   const clear = () => {
     onChange({});
   };
+
+  // Effective tag-match mode shown on the toggle: explicit override, else the
+  // server's configured default.
+  const effectiveTagMode: TagMatchMode = filters.tagMode ?? defaultTagMode;
 
   return (
     <div className="filter-bar">
@@ -51,6 +61,9 @@ export function FilterBar({ filters, onChange, types, sources }: Props) {
           <button className="filter-clear-all" onClick={clear}>
             Clear
           </button>
+        )}
+        {sort && onSortChange && (
+          <SortControl sort={sort} onChange={onSortChange} />
         )}
       </div>
 
@@ -97,7 +110,27 @@ export function FilterBar({ filters, onChange, types, sources }: Props) {
             </select>
           </div>
           <div className="filter-group">
-            <label className="filter-label">Tags</label>
+            <label className="filter-label">
+              Tags
+              <span className="tag-mode-toggle" role="group" aria-label="Tag match mode">
+                <button
+                  type="button"
+                  className={effectiveTagMode === 'any' ? 'active' : ''}
+                  onClick={() => update({ tagMode: 'any' })}
+                  title="Match entries with ANY of these tags"
+                >
+                  Any
+                </button>
+                <button
+                  type="button"
+                  className={effectiveTagMode === 'all' ? 'active' : ''}
+                  onClick={() => update({ tagMode: 'all' })}
+                  title="Match entries with ALL of these tags"
+                >
+                  All
+                </button>
+              </span>
+            </label>
             <input
               type="text"
               className="filter-input"

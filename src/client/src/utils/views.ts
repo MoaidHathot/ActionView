@@ -8,6 +8,7 @@ export function viewToFilters(view: SavedView): EntryFilters {
   return {
     type: view.type || undefined,
     tags: view.tags && view.tags.length > 0 ? view.tags.join(',') : undefined,
+    tagMode: view.tags && view.tags.length > 0 ? view.tagMatch : undefined,
   };
 }
 

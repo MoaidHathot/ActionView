@@ -9,9 +9,13 @@ public static class HistoryEndpoints
     {
         var group = app.MapGroup("/api/history");
 
-        group.MapGet("/", (EntryStore store, string? type, string? severity, string? source, string? tags, string? search, int? limit, int? offset) =>
+        group.MapGet("/", (EntryStore store, AppConfig config,
+            string? type, string? severity, string? source, string? tags, string? search,
+            string? tagMode, string? sort, string? dir, int? limit, int? offset) =>
         {
-            var entries = store.GetArchivedEntries(type, limit ?? 50, offset ?? 0);
+            var sortField = EntrySorting.TryParseField(sort);
+            var sortDir = EntrySorting.ParseDirection(dir);
+            var entries = store.GetArchivedEntries(type, limit ?? 50, offset ?? 0, sortField, sortDir);
 
             if (!string.IsNullOrWhiteSpace(severity) && Enum.TryParse<Severity>(severity, true, out var sev))
                 entries = entries.Where(e => e.Severity == sev).ToList();
@@ -22,7 +26,8 @@ public static class HistoryEndpoints
             if (!string.IsNullOrWhiteSpace(tags))
             {
                 var tagList = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                entries = entries.Where(e => tagList.Any(t => e.Tags.Contains(t, StringComparer.OrdinalIgnoreCase))).ToList();
+                var mode = EntryFiltering.ParseTagMode(tagMode, config.TagMatchMode);
+                entries = entries.Where(e => EntryFiltering.MatchesTags(e, tagList, mode)).ToList();
             }
 
             if (!string.IsNullOrWhiteSpace(search))

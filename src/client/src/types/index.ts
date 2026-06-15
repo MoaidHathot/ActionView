@@ -306,7 +306,25 @@ export interface EntryFilters {
   severity?: string;
   source?: string;
   tags?: string;
+  tagMode?: TagMatchMode;
   search?: string;
+}
+
+/** How multiple tag filters combine: 'any' (OR) or 'all' (AND). */
+export type TagMatchMode = 'any' | 'all';
+
+/** Sort field for the entry list. 'default' keeps the server's canonical order. */
+export type SortField = 'default' | 'created' | 'priority' | 'severity' | 'title';
+export type SortDir = 'asc' | 'desc';
+
+export interface SortOption {
+  field: SortField;
+  direction: SortDir;
+}
+
+/** Client-facing slice of server config (GET /api/config). */
+export interface ClientConfig {
+  tagMatchMode: TagMatchMode;
 }
 
 /**
@@ -317,6 +335,8 @@ export interface EntryFilters {
 export interface SavedView {
   id: string;
   name: string;
+  icon?: string;
   type?: string;
   tags?: string[];
+  tagMatch?: TagMatchMode;
 }

@@ -26,6 +26,7 @@ public sealed partial class ViewStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
         WriteIndented = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
     };
 
     private static readonly JsonDocumentOptions ParseOptions = new()
@@ -135,8 +136,10 @@ public sealed partial class ViewStore
             {
                 Id = id,
                 Name = name,
+                Icon = string.IsNullOrWhiteSpace(view.Icon) ? null : view.Icon.Trim(),
                 Type = string.IsNullOrWhiteSpace(view.Type) ? null : view.Type.Trim(),
                 Tags = tags,
+                TagMatch = view.TagMatch,
             });
         }
 

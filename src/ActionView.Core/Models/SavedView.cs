@@ -20,14 +20,26 @@ public sealed class SavedView
     public required string Name { get; set; }
 
     /// <summary>
+    /// Optional icon name (kebab-case lucide id, e.g. "briefcase") rendered on
+    /// the view pill. Null/empty renders a text-only pill.
+    /// </summary>
+    public string? Icon { get; set; }
+
+    /// <summary>
     /// Optional entry type ("template") to filter by. When set, only entries of
     /// this type are shown. Null/empty means the view does not constrain by type.
     /// </summary>
     public string? Type { get; set; }
 
     /// <summary>
-    /// Tags to filter by, matched with OR semantics (an entry is included if it
-    /// carries any of these tags). Empty means the view does not constrain by tag.
+    /// Tags to filter by. Combined using <see cref="TagMatch"/> (or the global
+    /// default when null). Empty means the view does not constrain by tag.
     /// </summary>
     public List<string> Tags { get; set; } = [];
+
+    /// <summary>
+    /// How this view's <see cref="Tags"/> combine: All (AND) or Any (OR).
+    /// Null inherits the global <see cref="AppConfig.TagMatchMode"/>.
+    /// </summary>
+    public TagMatchMode? TagMatch { get; set; }
 }

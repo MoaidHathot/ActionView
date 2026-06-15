@@ -115,6 +115,7 @@ app.MapStatsEndpoints();
 app.MapFileEndpoints();
 app.MapExportEndpoints();
 app.MapViewEndpoints();
+app.MapConfigEndpoints();
 app.MapHub<EntryHub>("/hubs/entries");
 
 // SPA fallback: serve index.html for non-API, non-file routes so

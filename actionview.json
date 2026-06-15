@@ -15,9 +15,11 @@
     }
   },
   "secrets": {},
+  "tagMatchMode": "all",
   "views": [
-    { "id": "work", "name": "Work", "tags": ["work"] },
-    { "id": "personal", "name": "Personal", "tags": ["personal"] },
-    { "id": "deploys", "name": "Deploys", "type": "deploy" }
+    { "id": "work", "name": "Work", "icon": "briefcase", "tags": ["work"] },
+    { "id": "personal", "name": "Personal", "icon": "user", "tags": ["personal"] },
+    { "id": "deploys", "name": "Deploys", "icon": "rocket", "type": "deploy" },
+    { "id": "urgent-work", "name": "Urgent Work", "icon": "flame", "tags": ["work", "urgent"], "tagMatch": "all" }
   ]
 }

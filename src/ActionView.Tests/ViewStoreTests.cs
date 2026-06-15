@@ -106,4 +106,37 @@ public class ViewStoreTests : IDisposable
         Assert.Single(reloaded.Views);
         Assert.Equal("Personal", reloaded.Views[0].Name);
     }
+
+    [Fact]
+    public void SaveViews_RoundTripsIconAndTagMatch()
+    {
+        var configPath = Path.Combine(_tempDir, "actionview.json");
+        File.WriteAllText(configPath, "{}");
+        var config = new AppConfig { SourcePath = configPath };
+        var store = CreateStore(config);
+
+        store.SaveViews([
+            new SavedView { Name = "Work", Icon = "briefcase", Tags = ["work", "urgent"], TagMatch = TagMatchMode.All },
+        ]);
+
+        // The enum must persist as a string ("all"), not a number.
+        var raw = File.ReadAllText(configPath);
+        Assert.Contains("\"tagMatch\": \"all\"", raw);
+        Assert.Contains("\"icon\": \"briefcase\"", raw);
+
+        var reloaded = ConfigLoader.Load(explicitPath: configPath);
+        var view = Assert.Single(reloaded.Views);
+        Assert.Equal("briefcase", view.Icon);
+        Assert.Equal(TagMatchMode.All, view.TagMatch);
+    }
+
+    [Fact]
+    public void Load_ParsesGlobalTagMatchMode_FromString()
+    {
+        var configPath = Path.Combine(_tempDir, "actionview.json");
+        File.WriteAllText(configPath, """{ "tagMatchMode": "all" }""");
+
+        var config = ConfigLoader.Load(explicitPath: configPath);
+        Assert.Equal(TagMatchMode.All, config.TagMatchMode);
+    }
 }

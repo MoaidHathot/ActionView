@@ -44,6 +44,13 @@ public sealed class AppConfig
     public List<SavedView> Views { get; set; } = new();
 
     /// <summary>
+    /// Default semantics for multi-tag filters when a request/view does not
+    /// specify its own. <see cref="TagMatchMode.Any"/> (OR) or
+    /// <see cref="TagMatchMode.All"/> (AND). Default: Any.
+    /// </summary>
+    public TagMatchMode TagMatchMode { get; set; } = TagMatchMode.Any;
+
+    /// <summary>
     /// Default undo window in seconds for actions with undo commands.
     /// Per-action UndoWindowSeconds overrides this value. Default: 10.
     /// </summary>

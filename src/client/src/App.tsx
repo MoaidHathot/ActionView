@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Activity, Clock, FileText, Wifi, WifiOff, Rows3, Sun, Moon } from 'lucide-react';
-import type { Entry, DashboardStats, EntryFilters, SavedView } from './types';
+import type { Entry, DashboardStats, EntryFilters, SortOption, ClientConfig } from './types';
 import type { UndoItem } from './components/UndoToast';
 import { api } from './api/client';
 import { useSignalR } from './hooks/useSignalR';
@@ -13,7 +13,7 @@ import { HistoryView } from './components/HistoryView';
 import { TemplatesView } from './components/TemplatesView';
 import { FilterBar } from './components/FilterBar';
 import { ViewBar } from './components/ViewBar';
-import { activeViewId, viewToFilters } from './utils/views';
+import { useViews, useViewBinding } from './hooks/useViews';
 import { BatchActionBar } from './components/BatchActionBar';
 import { ShortcutHelp } from './components/ShortcutHelp';
 import { ToastContainer, useToasts } from './components/ToastContainer';
@@ -32,7 +32,9 @@ export default function App() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<EntryFilters>({});
-  const [views, setViews] = useState<SavedView[]>([]);
+  const [sort, setSort] = useState<SortOption>({ field: 'default', direction: 'desc' });
+  const [clientConfig, setClientConfig] = useState<ClientConfig | null>(null);
+  const { views, createView, deleteView } = useViews();
   const { toasts, addToast, dismissToast } = useToasts();
   const { theme, toggle: toggleTheme } = useTheme();
 
@@ -56,13 +58,13 @@ export default function App() {
     [entries],
   );
 
-  // Which saved view (if any) the current filters correspond to.
-  const currentViewId = useMemo(() => activeViewId(filters, views), [filters, views]);
+  // Saved-view bar wiring for the active feed.
+  const viewBinding = useViewBinding(filters, setFilters, views, createView, deleteView);
 
   const loadEntries = useCallback(async () => {
     try {
       const [entriesData, statsData] = await Promise.all([
-        api.getEntries(filters),
+        api.getEntries(filters, sort),
         api.getStats(),
       ]);
       setEntries(entriesData);
@@ -72,7 +74,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, sort]);
 
   useEffect(() => {
     loadEntries();
@@ -94,11 +96,11 @@ export default function App() {
     };
   }, [loadEntries]);
 
-  // Load saved views once on mount.
+  // Load server config once on mount (provides the global tag-match default).
   useEffect(() => {
-    api.getViews()
-      .then(setViews)
-      .catch((err) => console.error('Failed to load views:', err));
+    api.getConfig()
+      .then(setClientConfig)
+      .catch((err) => console.error('Failed to load config:', err));
   }, []);
 
   const { isConnected } = useSignalR({
@@ -196,57 +198,6 @@ export default function App() {
   const handleEntryUpdated = useCallback((updated: Entry) => {
     setEntries((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
     setSelectedEntry(updated);
-  }, []);
-
-  // --- Saved views ---
-  const handleApplyAll = useCallback(() => setFilters({}), []);
-
-  const handleApplyView = useCallback((view: SavedView) => {
-    setFilters(viewToFilters(view));
-  }, []);
-
-  const handleCreateView = useCallback(
-    async (partial: { name: string; type?: string; tags?: string[] }) => {
-      const draft: SavedView = {
-        id: '',
-        name: partial.name,
-        type: partial.type,
-        tags: partial.tags ?? [],
-      };
-      try {
-        const saved = await api.saveViews([...views, draft]);
-        setViews(saved);
-        // Apply the new view (server-normalized; fall back to the last entry).
-        const created =
-          saved.find(
-            (v) =>
-              v.name === partial.name && (v.type || '') === (partial.type || ''),
-          ) ?? saved[saved.length - 1];
-        if (created) setFilters(viewToFilters(created));
-      } catch (err) {
-        console.error('Failed to save view:', err);
-      }
-    },
-    [views],
-  );
-
-  const handleDeleteView = useCallback(
-    async (id: string) => {
-      const wasActive = activeViewId(filters, views) === id;
-      try {
-        const saved = await api.saveViews(views.filter((v) => v.id !== id));
-        setViews(saved);
-        if (wasActive) setFilters({});
-      } catch (err) {
-        console.error('Failed to delete view:', err);
-      }
-    },
-    [views, filters],
-  );
-
-  // Clicking a tag chip in the list scopes the feed to that tag.
-  const handleTagClick = useCallback((tag: string) => {
-    setFilters((prev) => ({ ...prev, tags: tag }));
   }, []);
 
   // --- Batch selection ---
@@ -449,18 +400,21 @@ export default function App() {
             <div className="panel-left">
               <ViewBar
                 views={views}
-                activeId={currentViewId}
+                activeId={viewBinding.currentViewId}
                 currentFilters={filters}
-                onApplyAll={handleApplyAll}
-                onApplyView={handleApplyView}
-                onCreate={handleCreateView}
-                onDelete={handleDeleteView}
+                onApplyAll={viewBinding.onApplyAll}
+                onApplyView={viewBinding.onApplyView}
+                onCreate={viewBinding.onCreate}
+                onDelete={viewBinding.onDelete}
               />
               <FilterBar
                 filters={filters}
                 onChange={setFilters}
                 types={uniqueTypes}
                 sources={uniqueSources}
+                defaultTagMode={clientConfig?.tagMatchMode ?? 'any'}
+                sort={sort}
+                onSortChange={setSort}
               />
               {selectionMode && selectedIds.size > 0 && (
                 <BatchActionBar
@@ -482,7 +436,7 @@ export default function App() {
                   selectedIds={selectedIds}
                   onToggleSelect={handleToggleSelect}
                   onSelectAll={handleSelectAll}
-                  onTagClick={handleTagClick}
+                  onTagClick={viewBinding.onTagClick}
                 />
               )}
             </div>
@@ -507,7 +461,12 @@ export default function App() {
             </div>
           </div>
         ) : view === 'history' ? (
-          <HistoryView />
+          <HistoryView
+            views={views}
+            createView={createView}
+            deleteView={deleteView}
+            defaultTagMode={clientConfig?.tagMatchMode ?? 'any'}
+          />
         ) : (
           <TemplatesView />
         )}

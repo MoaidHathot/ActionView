@@ -1,6 +1,6 @@
 import type {
   Entry, ActionExecutionResult, DashboardStats, EntryUpdateRequest,
-  BatchResult, EntryTemplate, EntryFilters, SavedView,
+  BatchResult, EntryTemplate, EntryFilters, SavedView, SortOption, ClientConfig,
 } from '../types';
 
 const API_BASE = '/api';
@@ -21,16 +21,25 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+function applyFilterParams(params: URLSearchParams, filters?: EntryFilters, sort?: SortOption) {
+  if (filters?.type) params.set('type', filters.type);
+  if (filters?.severity) params.set('severity', filters.severity);
+  if (filters?.source) params.set('source', filters.source);
+  if (filters?.tags) params.set('tags', filters.tags);
+  if (filters?.tagMode) params.set('tagMode', filters.tagMode);
+  if (filters?.search) params.set('search', filters.search);
+  if (sort && sort.field !== 'default') {
+    params.set('sort', sort.field);
+    params.set('dir', sort.direction);
+  }
+}
+
 export const api = {
   // --- Entries ---
 
-  getEntries: (filters?: EntryFilters) => {
+  getEntries: (filters?: EntryFilters, sort?: SortOption) => {
     const params = new URLSearchParams();
-    if (filters?.type) params.set('type', filters.type);
-    if (filters?.severity) params.set('severity', filters.severity);
-    if (filters?.source) params.set('source', filters.source);
-    if (filters?.tags) params.set('tags', filters.tags);
-    if (filters?.search) params.set('search', filters.search);
+    applyFilterParams(params, filters, sort);
     const qs = params.toString();
     return fetchJson<Entry[]>(`${API_BASE}/entries${qs ? `?${qs}` : ''}`);
   },
@@ -98,13 +107,9 @@ export const api = {
 
   // --- History ---
 
-  getHistory: (filters?: EntryFilters, limit = 50, offset = 0) => {
+  getHistory: (filters?: EntryFilters, limit = 50, offset = 0, sort?: SortOption) => {
     const params = new URLSearchParams();
-    if (filters?.type) params.set('type', filters.type);
-    if (filters?.severity) params.set('severity', filters.severity);
-    if (filters?.source) params.set('source', filters.source);
-    if (filters?.tags) params.set('tags', filters.tags);
-    if (filters?.search) params.set('search', filters.search);
+    applyFilterParams(params, filters, sort);
     params.set('limit', limit.toString());
     params.set('offset', offset.toString());
     return fetchJson<Entry[]>(`${API_BASE}/history?${params}`);
@@ -149,4 +154,9 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(views),
     }),
+
+  // --- Server config (read-only slice the dashboard mirrors) ---
+
+  getConfig: () =>
+    fetchJson<ClientConfig>(`${API_BASE}/config`),
 };
