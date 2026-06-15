@@ -1,6 +1,6 @@
 import type {
   Entry, ActionExecutionResult, DashboardStats, EntryUpdateRequest,
-  BatchResult, EntryTemplate, EntryFilters,
+  BatchResult, EntryTemplate, EntryFilters, SavedView,
 } from '../types';
 
 const API_BASE = '/api';
@@ -137,4 +137,16 @@ export const api = {
 
   deleteTemplate: (type: string) =>
     fetchJson<void>(`${API_BASE}/templates/${type}`, { method: 'DELETE' }),
+
+  // --- Views (saved filter presets) ---
+
+  getViews: () =>
+    fetchJson<SavedView[]>(`${API_BASE}/views`),
+
+  // Replaces the full set of saved views and persists them to actionview.json.
+  saveViews: (views: SavedView[]) =>
+    fetchJson<SavedView[]>(`${API_BASE}/views`, {
+      method: 'PUT',
+      body: JSON.stringify(views),
+    }),
 };

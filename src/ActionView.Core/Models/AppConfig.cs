@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ActionView.Core.Models;
 
 /// <summary>
@@ -33,6 +35,15 @@ public sealed class AppConfig
     public Dictionary<string, string> Secrets { get; set; } = new();
 
     /// <summary>
+    /// Saved filter presets ("views") used to group the active feed into lanes
+    /// (e.g., Work vs. Personal). Each view stores an optional entry type and/or
+    /// a set of tags. The always-present "All" view is synthesized by the client
+    /// and is not stored here. Can be edited from the dashboard, which persists
+    /// changes back to this file via the /api/views endpoint.
+    /// </summary>
+    public List<SavedView> Views { get; set; } = new();
+
+    /// <summary>
     /// Default undo window in seconds for actions with undo commands.
     /// Per-action UndoWindowSeconds overrides this value. Default: 10.
     /// </summary>
@@ -45,6 +56,15 @@ public sealed class AppConfig
     /// Defaults to "http://localhost:5173".
     /// </summary>
     public string ListenUrl { get; set; } = DefaultListenUrl;
+
+    /// <summary>
+    /// Absolute path to the actionview.json this config was loaded from, captured
+    /// by <see cref="Services.ConfigLoader"/>. Null when no config file was found
+    /// (defaults in use). Used by the views write-back path to update the same
+    /// file. Never serialized.
+    /// </summary>
+    [JsonIgnore]
+    public string? SourcePath { get; set; }
 
     public const string DefaultListenUrl = "http://localhost:5173";
 

@@ -331,6 +331,39 @@ body {
   font-size: 10px;
 }
 
+.entry-list-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.entry-tag {
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.entry-tag.clickable {
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.entry-tag.clickable:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.entry-tag-more {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
 /* ===== Entry Detail ===== */
 .entry-detail {
   padding: 24px;
@@ -1229,6 +1262,147 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* ===== View Bar (saved filter presets) ===== */
+.view-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.view-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+/* The "All" pill has no delete button, so keep its padding symmetric. */
+button.view-pill {
+  padding: 3px 12px;
+}
+
+.view-pill:hover {
+  background: var(--bg-hover);
+  color: var(--text-heading);
+}
+
+.view-pill.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.view-pill-label {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.view-pill-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.5;
+  cursor: pointer;
+  padding: 1px;
+  border-radius: 50%;
+}
+
+.view-pill-delete:hover {
+  opacity: 1;
+  background: var(--bg-hover);
+}
+
+.view-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.view-add-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.view-add-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+}
+
+.view-add-input {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  width: 110px;
+  outline: none;
+}
+
+.view-add-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.view-add-save,
+.view-add-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 50%;
+}
+
+.view-add-save:not(:disabled):hover {
+  color: var(--accent);
+}
+
+.view-add-save:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.view-add-cancel:hover {
+  color: var(--text-heading);
 }
 
 /* ===== Filter Bar ===== */

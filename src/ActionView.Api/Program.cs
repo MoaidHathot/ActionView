@@ -67,6 +67,7 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddSingleton<ActionExecutor>();
 builder.Services.AddHttpClient<ActionExecutor>();
 builder.Services.AddSingleton<ToastNotifier>();
+builder.Services.AddSingleton<ViewStore>();
 
 // SignalR
 builder.Services.AddSignalR().AddJsonProtocol(options =>
@@ -113,6 +114,7 @@ app.MapHistoryEndpoints();
 app.MapStatsEndpoints();
 app.MapFileEndpoints();
 app.MapExportEndpoints();
+app.MapViewEndpoints();
 app.MapHub<EntryHub>("/hubs/entries");
 
 // SPA fallback: serve index.html for non-API, non-file routes so

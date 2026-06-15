@@ -16,7 +16,11 @@ interface Props {
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
   onSelectAll: () => void;
+  // Clicking a tag chip scopes the feed to that tag.
+  onTagClick?: (tag: string) => void;
 }
+
+const MAX_VISIBLE_TAGS = 4;
 
 const severityColors: Record<Severity, string> = {
   critical: '#ef4444',
@@ -62,7 +66,7 @@ function groupEntries(entries: Entry[]): GroupedEntries[] {
 }
 
 export function EntryList({
-  entries, selectedId, onSelect, onDismiss, selectionMode, selectedIds, onToggleSelect, onSelectAll,
+  entries, selectedId, onSelect, onDismiss, selectionMode, selectedIds, onToggleSelect, onSelectAll, onTagClick,
 }: Props) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
@@ -146,6 +150,25 @@ export function EntryList({
               </span>
             )}
           </div>
+          {entry.tags.length > 0 && (
+            <div className="entry-list-item-tags">
+              {entry.tags.slice(0, MAX_VISIBLE_TAGS).map((tag) => (
+                <span
+                  key={tag}
+                  className={`entry-tag ${onTagClick ? 'clickable' : ''}`}
+                  title={onTagClick ? `Filter by "${tag}"` : tag}
+                  onClick={onTagClick ? (e) => { e.stopPropagation(); onTagClick(tag); } : undefined}
+                >
+                  {tag}
+                </span>
+              ))}
+              {entry.tags.length > MAX_VISIBLE_TAGS && (
+                <span className="entry-tag-more" title={entry.tags.slice(MAX_VISIBLE_TAGS).join(', ')}>
+                  +{entry.tags.length - MAX_VISIBLE_TAGS}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         {!selectionMode && (
           <button

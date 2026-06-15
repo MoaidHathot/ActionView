@@ -14,5 +14,10 @@
       "heroImage": null
     }
   },
-  "secrets": {}
+  "secrets": {},
+  "views": [
+    { "id": "work", "name": "Work", "tags": ["work"] },
+    { "id": "personal", "name": "Personal", "tags": ["personal"] },
+    { "id": "deploys", "name": "Deploys", "type": "deploy" }
+  ]
 }

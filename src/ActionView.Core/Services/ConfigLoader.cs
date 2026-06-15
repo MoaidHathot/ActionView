@@ -39,6 +39,10 @@ public sealed class ConfigLoader
         var json = File.ReadAllText(configPath);
         var config = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions) ?? new AppConfig();
 
+        // Remember where this config came from so the views write-back path can
+        // update the same file in place.
+        config.SourcePath = Path.GetFullPath(configPath);
+
         // Resolve relative paths against config file location
         var configDir = Path.GetDirectoryName(Path.GetFullPath(configPath))!;
 

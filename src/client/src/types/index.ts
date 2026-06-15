@@ -308,3 +308,15 @@ export interface EntryFilters {
   tags?: string;
   search?: string;
 }
+
+/**
+ * A saved filter preset ("view") that groups the active feed into lanes
+ * (e.g. Work vs. Personal). Mirrors the C# SavedView model. The always-present
+ * "All" view is synthesized client-side and is not stored on the server.
+ */
+export interface SavedView {
+  id: string;
+  name: string;
+  type?: string;
+  tags?: string[];
+}

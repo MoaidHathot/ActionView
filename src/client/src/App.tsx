@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Activity, Clock, FileText, Wifi, WifiOff, Rows3, Sun, Moon } from 'lucide-react';
-import type { Entry, DashboardStats, EntryFilters } from './types';
+import type { Entry, DashboardStats, EntryFilters, SavedView } from './types';
 import type { UndoItem } from './components/UndoToast';
 import { api } from './api/client';
 import { useSignalR } from './hooks/useSignalR';
@@ -12,6 +12,8 @@ import { EntryDetail } from './components/EntryDetail';
 import { HistoryView } from './components/HistoryView';
 import { TemplatesView } from './components/TemplatesView';
 import { FilterBar } from './components/FilterBar';
+import { ViewBar } from './components/ViewBar';
+import { activeViewId, viewToFilters } from './utils/views';
 import { BatchActionBar } from './components/BatchActionBar';
 import { ShortcutHelp } from './components/ShortcutHelp';
 import { ToastContainer, useToasts } from './components/ToastContainer';
@@ -30,6 +32,7 @@ export default function App() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<EntryFilters>({});
+  const [views, setViews] = useState<SavedView[]>([]);
   const { toasts, addToast, dismissToast } = useToasts();
   const { theme, toggle: toggleTheme } = useTheme();
 
@@ -52,6 +55,9 @@ export default function App() {
     () => [...new Set(entries.map((e) => e.source))].sort(),
     [entries],
   );
+
+  // Which saved view (if any) the current filters correspond to.
+  const currentViewId = useMemo(() => activeViewId(filters, views), [filters, views]);
 
   const loadEntries = useCallback(async () => {
     try {
@@ -87,6 +93,13 @@ export default function App() {
       window.removeEventListener('online', reloadIfVisible);
     };
   }, [loadEntries]);
+
+  // Load saved views once on mount.
+  useEffect(() => {
+    api.getViews()
+      .then(setViews)
+      .catch((err) => console.error('Failed to load views:', err));
+  }, []);
 
   const { isConnected } = useSignalR({
     onEntriesAdded: (newEntries) => {
@@ -183,6 +196,57 @@ export default function App() {
   const handleEntryUpdated = useCallback((updated: Entry) => {
     setEntries((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
     setSelectedEntry(updated);
+  }, []);
+
+  // --- Saved views ---
+  const handleApplyAll = useCallback(() => setFilters({}), []);
+
+  const handleApplyView = useCallback((view: SavedView) => {
+    setFilters(viewToFilters(view));
+  }, []);
+
+  const handleCreateView = useCallback(
+    async (partial: { name: string; type?: string; tags?: string[] }) => {
+      const draft: SavedView = {
+        id: '',
+        name: partial.name,
+        type: partial.type,
+        tags: partial.tags ?? [],
+      };
+      try {
+        const saved = await api.saveViews([...views, draft]);
+        setViews(saved);
+        // Apply the new view (server-normalized; fall back to the last entry).
+        const created =
+          saved.find(
+            (v) =>
+              v.name === partial.name && (v.type || '') === (partial.type || ''),
+          ) ?? saved[saved.length - 1];
+        if (created) setFilters(viewToFilters(created));
+      } catch (err) {
+        console.error('Failed to save view:', err);
+      }
+    },
+    [views],
+  );
+
+  const handleDeleteView = useCallback(
+    async (id: string) => {
+      const wasActive = activeViewId(filters, views) === id;
+      try {
+        const saved = await api.saveViews(views.filter((v) => v.id !== id));
+        setViews(saved);
+        if (wasActive) setFilters({});
+      } catch (err) {
+        console.error('Failed to delete view:', err);
+      }
+    },
+    [views, filters],
+  );
+
+  // Clicking a tag chip in the list scopes the feed to that tag.
+  const handleTagClick = useCallback((tag: string) => {
+    setFilters((prev) => ({ ...prev, tags: tag }));
   }, []);
 
   // --- Batch selection ---
@@ -383,6 +447,15 @@ export default function App() {
         {view === 'active' ? (
           <div className="split-panel">
             <div className="panel-left">
+              <ViewBar
+                views={views}
+                activeId={currentViewId}
+                currentFilters={filters}
+                onApplyAll={handleApplyAll}
+                onApplyView={handleApplyView}
+                onCreate={handleCreateView}
+                onDelete={handleDeleteView}
+              />
               <FilterBar
                 filters={filters}
                 onChange={setFilters}
@@ -409,6 +482,7 @@ export default function App() {
                   selectedIds={selectedIds}
                   onToggleSelect={handleToggleSelect}
                   onSelectAll={handleSelectAll}
+                  onTagClick={handleTagClick}
                 />
               )}
             </div>
