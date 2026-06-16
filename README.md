@@ -263,8 +263,9 @@ The config file is resolved in this order (first match wins):
 
 1. `--config` CLI argument
 2. `ACTIONVIEW_CONFIG` environment variable
-3. `ActionView:ConfigPath` in `appsettings.json`
-4. `./actionview.json` in the current directory
+3. `$XDG_CONFIG_HOME/actionview/actionview.json`
+4. `ActionView:ConfigPath` in `appsettings.json`
+5. `./actionview.json` in the current directory
 
 ### Secrets
 
