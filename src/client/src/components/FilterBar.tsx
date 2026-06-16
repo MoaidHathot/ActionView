@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, X, Filter } from 'lucide-react';
 import type { EntryFilters, SortOption, TagMatchMode } from '../types';
 import { SortControl } from './SortControl';
+
+// How long to wait after the last keystroke before applying the search filter.
+const SEARCH_DEBOUNCE_MS = 250;
 
 interface Props {
   filters: EntryFilters;
@@ -17,14 +20,46 @@ export function FilterBar({
   filters, onChange, types, sources, defaultTagMode = 'any', sort, onSortChange,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const hasFilters = !!(filters.type || filters.severity || filters.source || filters.tags || filters.search);
+
+  // Local, immediately-responsive copy of the search box. The value is only
+  // pushed up to `filters` (which triggers a refetch) after the user pauses
+  // typing, so we don't hit the API on every keystroke.
+  const [searchText, setSearchText] = useState(filters.search ?? '');
+  const [lastExternalSearch, setLastExternalSearch] = useState(filters.search ?? '');
+
+  // If the search changes externally (Clear button, applying a saved view),
+  // reset the local box. Adjusting state during render is React's recommended
+  // alternative to a prop->state sync effect.
+  const externalSearch = filters.search ?? '';
+  if (externalSearch !== lastExternalSearch) {
+    setLastExternalSearch(externalSearch);
+    setSearchText(externalSearch);
+  }
+
+  // Debounced propagation: the timer resets on every change and only fires once
+  // typing settles.
+  useEffect(() => {
+    const next = searchText || undefined;
+    if ((filters.search ?? '') === (next ?? '')) return;
+    const handle = setTimeout(() => onChange({ ...filters, search: next }), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [searchText, filters, onChange]);
+
+  const hasFilters = !!(filters.type || filters.severity || filters.source || filters.tags || searchText);
 
   const update = (partial: Partial<EntryFilters>) => {
     onChange({ ...filters, ...partial });
   };
 
   const clear = () => {
+    setSearchText('');
     onChange({});
+  };
+
+  // Clearing the search box applies immediately (no debounce wait).
+  const clearSearch = () => {
+    setSearchText('');
+    onChange({ ...filters, search: undefined });
   };
 
   // Effective tag-match mode shown on the toggle: explicit override, else the
@@ -39,12 +74,12 @@ export function FilterBar({
           <input
             type="text"
             placeholder="Search entries..."
-            value={filters.search ?? ''}
-            onChange={(e) => update({ search: e.target.value || undefined })}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
             className="filter-search-input"
           />
-          {filters.search && (
-            <button className="filter-clear-btn" onClick={() => update({ search: undefined })}>
+          {searchText && (
+            <button className="filter-clear-btn" onClick={clearSearch}>
               <X size={12} />
             </button>
           )}
