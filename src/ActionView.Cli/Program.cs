@@ -3,6 +3,7 @@ using System.CommandLine.Invocation;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using ActionView.Cli;
 using ActionView.Core.Models;
 using ActionView.Core.Services;
 using Microsoft.Extensions.Logging;
@@ -201,8 +202,15 @@ addCommand.SetHandler((InvocationContext ctx) =>
         }
         mutations.Add((s[..eq], ParseCliValue(s[(eq + 1)..])));
     }
-    if (groupId is not null) mutations.Add(("groupId", JsonValue.Create(groupId)));
-    if (groupLabel is not null) mutations.Add(("groupLabel", JsonValue.Create(groupLabel)));
+
+    // --group-id / --group-label are string options with a defaulted-empty value in many
+    // callers. Two hazards to defend against:
+    //   1. Empty value  -> omit the field entirely (never inject a meaningless "").
+    //   2. A shell that drops an empty "" argument collapses `--group-id "" --wait` into
+    //      `--group-id --wait`, so the parser swallows the *next flag* as the value. Reject
+    //      flag-looking values loudly instead of silently corrupting the entry.
+    if (!TryAddStringFlag("--group-id", "groupId", groupId, mutations, ctx)) return;
+    if (!TryAddStringFlag("--group-label", "groupLabel", groupLabel, mutations, ctx)) return;
     if (priority is not null) mutations.Add(("priority", JsonValue.Create(priority.Value)));
     if (pin) mutations.Add(("pinned", JsonValue.Create(true)));
 
@@ -872,6 +880,36 @@ static EntryValidator CreateValidator(AppConfig config)
     var registry = CreateRegistry(config);
     var normalizer = new EntryNormalizer(registry, NullLogger<EntryNormalizer>.Instance);
     return new EntryValidator(normalizer);
+}
+
+/// <summary>
+/// Records a string shortcut option (e.g. --group-id) as a mutation, defensively:
+/// an empty/whitespace value is omitted (never injected as ""), and a flag-looking value
+/// (leading '-') is rejected — it almost always means the shell dropped an empty argument
+/// and the parser swallowed the following flag (e.g. `--group-id "" --wait` -> the value
+/// "--wait"). Returns false and sets a non-zero exit code when it rejects the value.
+/// </summary>
+static bool TryAddStringFlag(
+    string flag, string field, string? value,
+    List<(string Key, JsonNode? Value)> mutations, InvocationContext ctx)
+{
+    switch (CliArg.ClassifyStringFlag(value, out var cleaned))
+    {
+        case StringFlagDisposition.Omit:
+            return true;
+
+        case StringFlagDisposition.Reject:
+            Console.Error.WriteLine(
+                $"Error: {flag} received '{value}', which looks like a flag. Its value was probably " +
+                $"dropped by the shell (e.g. an empty \"\" argument). Omit {flag} when you have no value, " +
+                $"or pass it via --set {field}=<value>.");
+            ctx.ExitCode = 1;
+            return false;
+
+        default:
+            mutations.Add((field, JsonValue.Create(cleaned)));
+            return true;
+    }
 }
 
 /// <summary>

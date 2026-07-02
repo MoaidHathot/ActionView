@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ActionView.Core\ActionView.Core.csproj" />
+    <ProjectReference Include="..\ActionView.Cli\ActionView.Cli.csproj" />
     <ProjectReference Include="..\ActionView.Mcp\ActionView.Mcp.csproj" />
   </ItemGroup>
 
