@@ -7,7 +7,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="JsonSchema.Net" Version="9.2.2" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+  </ItemGroup>
+
+  <!--
+    The entry JSON schema lives in the repo-root schemas/ directory and is the
+    single source of truth. It ships embedded in ActionView.Core so the validator,
+    the CLI `schema` command, and the MCP `get_schema` tool all read the same copy.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\schemas\entry.v1.schema.json" LogicalName="entry.v1.schema.json" />
   </ItemGroup>
 
 </Project>

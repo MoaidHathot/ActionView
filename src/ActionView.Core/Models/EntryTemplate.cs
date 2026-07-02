@@ -21,6 +21,41 @@ public sealed class EntryTemplate
 
     /// <summary>Expected entry-level actions.</summary>
     public List<ActionTemplateBlock> ExpectedActions { get; set; } = [];
+
+    /// <summary>
+    /// Optional map of alternative tag spellings to canonical tags (case-insensitive),
+    /// analogous to <see cref="ContentTemplateBlock.KeyAliases"/>. Keeps tag spelling
+    /// consistent across submitters so saved views / filters stay reliable.
+    /// E.g. { "back-end": "backend", "perf": "performance" }.
+    /// </summary>
+    public Dictionary<string, string>? TagAliases { get; set; }
+
+    /// <summary>How to normalize tag casing during ingest. Default: none.</summary>
+    public TagCaseMode TagCaseMode { get; set; } = TagCaseMode.None;
+
+    /// <summary>
+    /// Optional allow-list of canonical tags for this type. Tags outside the set are
+    /// <em>flagged</em> as a <c>tag.notAllowed</c> warning (surfaced by validation) but
+    /// never silently dropped, so information is not lost.
+    /// </summary>
+    public List<string>? AllowedTags { get; set; }
+
+    /// <summary>
+    /// When true, entries of this type are held to the template strictly: validation
+    /// warnings (e.g. a missing required content block) become blocking errors at ingest,
+    /// even when the global <c>ingest.strict</c> default is false.
+    /// </summary>
+    public bool Strict { get; set; }
+}
+
+/// <summary>How tag casing is normalized during ingest.</summary>
+public enum TagCaseMode
+{
+    /// <summary>Leave tag casing as authored.</summary>
+    None,
+
+    /// <summary>Lower-case all tags (invariant culture).</summary>
+    Lower
 }
 
 /// <summary>

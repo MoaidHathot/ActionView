@@ -18,10 +18,12 @@
     },
     "type": {
       "type": "string",
+      "minLength": 1,
       "description": "Category for grouping/filtering (e.g., 'pr-review', 'incident', 'deploy')."
     },
     "source": {
       "type": "string",
+      "minLength": 1,
       "description": "Name of the orchestration tool that created this entry."
     },
     "createdAt": {
@@ -31,6 +33,7 @@
     },
     "title": {
       "type": "string",
+      "minLength": 1,
       "description": "Primary display text shown in the list view."
     },
     "subtitle": {

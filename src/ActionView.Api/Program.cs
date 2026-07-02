@@ -59,9 +59,12 @@ builder.Services.AddSingleton<FileAccessResolver>();
 builder.Services.AddSingleton(sp =>
     new TemplateRegistry(config.DataDirectory, sp.GetRequiredService<ILogger<TemplateRegistry>>()));
 builder.Services.AddSingleton<EntryNormalizer>();
+builder.Services.AddSingleton<EntryValidator>();
 builder.Services.AddSingleton(sp =>
     new EntryStore(config.DataDirectory, sp.GetRequiredService<ILogger<EntryStore>>(),
-        sp.GetRequiredService<EntryNormalizer>()));
+        sp.GetRequiredService<EntryNormalizer>(),
+        sp.GetRequiredService<EntryValidator>(),
+        config.Ingest.Strict));
 builder.Services.AddSingleton(sp =>
     new InboxWatcher(config.DataDirectory, sp.GetRequiredService<EntryStore>(), sp.GetRequiredService<ILogger<InboxWatcher>>()));
 builder.Services.AddSingleton<ActionExecutor>();

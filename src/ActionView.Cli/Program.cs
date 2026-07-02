@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using ActionView.Core.Models;
 using ActionView.Core.Services;
@@ -87,8 +88,46 @@ var jsonOption = new Option<string?>(
 jsonOption.AddAlias("-j");
 addCommand.AddOption(jsonOption);
 
-addCommand.SetHandler((FileInfo? file, string? inlineJson, string? configPath) =>
+var setOption = new Option<string[]>(
+    "--set",
+    "Set a top-level field before submitting, as key=value (repeatable). Dotted keys and JSON " +
+    "values are supported, e.g. --set priority=5 --set groupId=ci-1847 --set 'tags=[\"work\"]'")
 {
+    AllowMultipleArgumentsPerToken = false
+};
+addCommand.AddOption(setOption);
+
+var groupIdOption = new Option<string?>("--group-id", "Shortcut for --set groupId=<value>");
+addCommand.AddOption(groupIdOption);
+var groupLabelOption = new Option<string?>("--group-label", "Shortcut for --set groupLabel=<value>");
+addCommand.AddOption(groupLabelOption);
+var priorityOption = new Option<int?>("--priority", "Shortcut for --set priority=<value>");
+addCommand.AddOption(priorityOption);
+var pinOption = new Option<bool>("--pin", "Shortcut for --set pinned=true");
+addCommand.AddOption(pinOption);
+var waitOption = new Option<bool>(
+    "--wait",
+    "Validate synchronously before writing to the inbox; fail fast with a precise report " +
+    "(non-zero exit) instead of discovering errors later in errors/");
+addCommand.AddOption(waitOption);
+var addStrictOption = new Option<bool>(
+    "--strict",
+    "With --wait, also treat warnings (e.g. a missing required content block) as failures");
+addCommand.AddOption(addStrictOption);
+
+addCommand.SetHandler((InvocationContext ctx) =>
+{
+    var file = ctx.ParseResult.GetValueForOption(fileOption);
+    var inlineJson = ctx.ParseResult.GetValueForOption(jsonOption);
+    var configPath = ctx.ParseResult.GetValueForOption(configOption);
+    var sets = ctx.ParseResult.GetValueForOption(setOption) ?? [];
+    var groupId = ctx.ParseResult.GetValueForOption(groupIdOption);
+    var groupLabel = ctx.ParseResult.GetValueForOption(groupLabelOption);
+    var priority = ctx.ParseResult.GetValueForOption(priorityOption);
+    var pin = ctx.ParseResult.GetValueForOption(pinOption);
+    var wait = ctx.ParseResult.GetValueForOption(waitOption);
+    var strict = ctx.ParseResult.GetValueForOption(addStrictOption);
+
     string json;
     string sourceName;
 
@@ -99,6 +138,7 @@ addCommand.SetHandler((FileInfo? file, string? inlineJson, string? configPath) =
         if (string.IsNullOrWhiteSpace(stdinContent))
         {
             Console.Error.WriteLine("Error: --file - specified but no data received on stdin.");
+            ctx.ExitCode = 1;
             return;
         }
         json = stdinContent;
@@ -107,6 +147,7 @@ addCommand.SetHandler((FileInfo? file, string? inlineJson, string? configPath) =
     else if (file is not null && inlineJson is not null)
     {
         Console.Error.WriteLine("Error: Provide either --file, --json, or pipe via stdin, not multiple.");
+        ctx.ExitCode = 1;
         return;
     }
     else if (file is not null)
@@ -114,6 +155,7 @@ addCommand.SetHandler((FileInfo? file, string? inlineJson, string? configPath) =
         if (!file.Exists)
         {
             Console.Error.WriteLine($"File not found: {file.FullName}");
+            ctx.ExitCode = 1;
             return;
         }
         json = File.ReadAllText(file.FullName);
@@ -141,46 +183,112 @@ addCommand.SetHandler((FileInfo? file, string? inlineJson, string? configPath) =
             Console.Error.WriteLine("    actionview add --json '{...}'");
             Console.Error.WriteLine("    cat entry.json | actionview add");
             Console.Error.WriteLine("    actionview add --file -  < entry.json");
+            ctx.ExitCode = 1;
             return;
         }
+    }
+
+    // Apply --set / shortcut mutations to the raw JSON before validating/writing.
+    var mutations = new List<(string Key, JsonNode? Value)>();
+    foreach (var s in sets)
+    {
+        var eq = s.IndexOf('=');
+        if (eq <= 0)
+        {
+            Console.Error.WriteLine($"Error: --set expects key=value, got '{s}'.");
+            ctx.ExitCode = 1;
+            return;
+        }
+        mutations.Add((s[..eq], ParseCliValue(s[(eq + 1)..])));
+    }
+    if (groupId is not null) mutations.Add(("groupId", JsonValue.Create(groupId)));
+    if (groupLabel is not null) mutations.Add(("groupLabel", JsonValue.Create(groupLabel)));
+    if (priority is not null) mutations.Add(("priority", JsonValue.Create(priority.Value)));
+    if (pin) mutations.Add(("pinned", JsonValue.Create(true)));
+
+    if (mutations.Count > 0)
+    {
+        JsonObject root;
+        try
+        {
+            root = JsonNode.Parse(json) as JsonObject
+                ?? throw new JsonException("Entry JSON must be a top-level object.");
+        }
+        catch (JsonException ex)
+        {
+            Console.Error.WriteLine($"Error: Invalid JSON - {ex.Message}");
+            ctx.ExitCode = 1;
+            return;
+        }
+
+        foreach (var (key, value) in mutations)
+            ApplySet(root, key, value);
+
+        json = root.ToJsonString(jsonWriteOptions);
     }
 
     var config = ConfigLoader.Load(configPath);
     var inboxDir = Path.Combine(config.DataDirectory, "inbox");
 
+    // --wait / --strict: validate synchronously and fail fast with a precise, structured
+    // report before touching the inbox (runs before deserialization so schema problems such
+    // as a bad enum surface as clean diagnostics rather than a raw binder exception).
+    if (wait || strict)
+    {
+        var validator = CreateValidator(config);
+        var result = validator.Validate(json, new EntryValidationOptions { Strict = strict });
+        if (!result.Ok)
+        {
+            Console.Error.WriteLine("Validation failed:");
+            Console.Error.WriteLine(EntryValidator.FormatDiagnostics(result));
+            ctx.ExitCode = 1;
+            return;
+        }
+        if (result.Warnings.Count > 0)
+        {
+            Console.Error.WriteLine("Validation warnings:");
+            Console.Error.WriteLine(EntryValidator.FormatDiagnostics(result));
+        }
+    }
+
+    Entry? entry;
     try
     {
-        var entry = JsonSerializer.Deserialize<Entry>(json, jsonReadOptions);
-
-        if (entry is null)
-        {
-            Console.Error.WriteLine("Error: Input does not contain a valid entry JSON.");
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(entry.Type) ||
-            string.IsNullOrWhiteSpace(entry.Source) ||
-            string.IsNullOrWhiteSpace(entry.Title))
-        {
-            Console.Error.WriteLine("Error: Entry is missing required fields (type, source, title).");
-            return;
-        }
-
-        var destName = $"{DateTimeOffset.UtcNow:yyyyMMddHHmmss}_{sourceName}";
-        var destPath = Path.Combine(inboxDir, destName);
-        File.WriteAllText(destPath, json);
-
-        Console.WriteLine($"Added to inbox: {destName}");
-        Console.WriteLine($"  Title:    {entry.Title}");
-        Console.WriteLine($"  Type:     {entry.Type}");
-        Console.WriteLine($"  Source:   {entry.Source}");
-        Console.WriteLine($"  Severity: {entry.Severity}");
+        entry = JsonSerializer.Deserialize<Entry>(json, jsonReadOptions);
     }
     catch (JsonException ex)
     {
         Console.Error.WriteLine($"Error: Invalid JSON - {ex.Message}");
+        ctx.ExitCode = 1;
+        return;
     }
-}, fileOption, jsonOption, configOption);
+
+    if (entry is null)
+    {
+        Console.Error.WriteLine("Error: Input does not contain a valid entry JSON.");
+        ctx.ExitCode = 1;
+        return;
+    }
+
+    if (string.IsNullOrWhiteSpace(entry.Type) ||
+        string.IsNullOrWhiteSpace(entry.Source) ||
+        string.IsNullOrWhiteSpace(entry.Title))
+    {
+        Console.Error.WriteLine("Error: Entry is missing required fields (type, source, title).");
+        ctx.ExitCode = 1;
+        return;
+    }
+
+    var destName = $"{DateTimeOffset.UtcNow:yyyyMMddHHmmss}_{sourceName}";
+    var destPath = Path.Combine(inboxDir, destName);
+    File.WriteAllText(destPath, json);
+
+    Console.WriteLine($"Added to inbox: {destName}");
+    Console.WriteLine($"  Title:    {entry.Title}");
+    Console.WriteLine($"  Type:     {entry.Type}");
+    Console.WriteLine($"  Source:   {entry.Source}");
+    Console.WriteLine($"  Severity: {entry.Severity}");
+});
 
 rootCommand.AddCommand(addCommand);
 
@@ -415,18 +523,110 @@ var schemaCommand = new Command("schema", "Print the entry JSON schema (for LLM 
 
 schemaCommand.SetHandler(() =>
 {
-    using var stream = typeof(Program).Assembly.GetManifestResourceStream("entry.v1.schema.json");
-    if (stream is null)
-    {
-        Console.Error.WriteLine("Error: Embedded schema resource not found.");
-        return;
-    }
-
-    using var reader = new StreamReader(stream);
-    Console.Write(reader.ReadToEnd());
+    Console.Write(EntrySchemaProvider.RawJson);
 });
 
 rootCommand.AddCommand(schemaCommand);
+
+// ================================================================
+// validate command
+// ================================================================
+var validateCommand = new Command("validate",
+    "Validate an entry JSON against the schema and its type template without adding it. " +
+    "Prints a { ok, errors[], warnings[] } report and exits non-zero on failure.");
+
+var validateFileOption = new Option<FileInfo?>("--file", "Path to the entry JSON file (use '-' to read from stdin)");
+validateFileOption.AddAlias("-f");
+validateCommand.AddOption(validateFileOption);
+
+var validateJsonOption = new Option<string?>("--json", "Inline entry JSON string");
+validateJsonOption.AddAlias("-j");
+validateCommand.AddOption(validateJsonOption);
+
+var validateTypeOption = new Option<string?>("--type", "Override the entry type before validating (selects which template applies)");
+validateCommand.AddOption(validateTypeOption);
+
+var validateStrictOption = new Option<bool>("--strict", "Treat warnings (e.g. a missing required content block) as errors");
+validateCommand.AddOption(validateStrictOption);
+
+validateCommand.SetHandler((InvocationContext ctx) =>
+{
+    var file = ctx.ParseResult.GetValueForOption(validateFileOption);
+    var inlineJson = ctx.ParseResult.GetValueForOption(validateJsonOption);
+    var typeOverride = ctx.ParseResult.GetValueForOption(validateTypeOption);
+    var strict = ctx.ParseResult.GetValueForOption(validateStrictOption);
+    var configPath = ctx.ParseResult.GetValueForOption(configOption);
+
+    string json;
+    if (file is not null && file.Name == "-")
+    {
+        var stdin = ReadStdin();
+        if (string.IsNullOrWhiteSpace(stdin))
+        {
+            Console.Error.WriteLine("Error: --file - specified but no data received on stdin.");
+            ctx.ExitCode = 2;
+            return;
+        }
+        json = stdin;
+    }
+    else if (file is not null && inlineJson is not null)
+    {
+        Console.Error.WriteLine("Error: Provide either --file, --json, or pipe via stdin, not multiple.");
+        ctx.ExitCode = 2;
+        return;
+    }
+    else if (file is not null)
+    {
+        if (!file.Exists)
+        {
+            Console.Error.WriteLine($"File not found: {file.FullName}");
+            ctx.ExitCode = 2;
+            return;
+        }
+        json = File.ReadAllText(file.FullName);
+    }
+    else if (inlineJson is not null)
+    {
+        json = inlineJson;
+    }
+    else
+    {
+        var stdin = ReadStdin();
+        if (string.IsNullOrWhiteSpace(stdin))
+        {
+            Console.Error.WriteLine("Error: Provide input via --file, --json, or pipe JSON through stdin.");
+            ctx.ExitCode = 2;
+            return;
+        }
+        json = stdin;
+    }
+
+    if (typeOverride is not null)
+    {
+        try
+        {
+            var root = JsonNode.Parse(json) as JsonObject
+                ?? throw new JsonException("Entry JSON must be a top-level object.");
+            root["type"] = JsonValue.Create(typeOverride);
+            json = root.ToJsonString(jsonWriteOptions);
+        }
+        catch (JsonException ex)
+        {
+            Console.Error.WriteLine($"Error: Invalid JSON - {ex.Message}");
+            ctx.ExitCode = 2;
+            return;
+        }
+    }
+
+    var config = ConfigLoader.Load(configPath);
+    var validator = CreateValidator(config);
+    var result = validator.Validate(json, new EntryValidationOptions { Strict = strict });
+
+    Console.WriteLine(JsonSerializer.Serialize(result, jsonWriteOptions));
+    ctx.ExitCode = result.Ok ? 0 : 1;
+});
+
+rootCommand.AddCommand(validateCommand);
 
 // ================================================================
 // template command group
@@ -661,4 +861,54 @@ static TemplateRegistry CreateRegistry(AppConfig config)
         scanner.Scan(config.Templates.ExternalDirectory, config.Templates.Recursive);
     }
     return registry;
+}
+
+/// <summary>
+/// Build an in-process EntryValidator (schema + template normalization) for the
+/// `validate` command and `add --wait`, without needing the server running.
+/// </summary>
+static EntryValidator CreateValidator(AppConfig config)
+{
+    var registry = CreateRegistry(config);
+    var normalizer = new EntryNormalizer(registry, NullLogger<EntryNormalizer>.Instance);
+    return new EntryValidator(normalizer);
+}
+
+/// <summary>
+/// Set a (possibly dotted) key on a JSON object, creating intermediate objects as needed.
+/// </summary>
+static void ApplySet(JsonObject root, string dottedKey, JsonNode? value)
+{
+    var parts = dottedKey.Split('.');
+    var current = root;
+    for (var i = 0; i < parts.Length - 1; i++)
+    {
+        if (current[parts[i]] is JsonObject child)
+        {
+            current = child;
+        }
+        else
+        {
+            var created = new JsonObject();
+            current[parts[i]] = created;
+            current = created;
+        }
+    }
+    current[parts[^1]] = value;
+}
+
+/// <summary>
+/// Parse a --set value: try JSON (numbers, booleans, arrays, objects, quoted strings),
+/// falling back to a bare string when it is not valid JSON (e.g. --set groupId=ci-1847).
+/// </summary>
+static JsonNode? ParseCliValue(string raw)
+{
+    try
+    {
+        return JsonNode.Parse(raw);
+    }
+    catch (JsonException)
+    {
+        return JsonValue.Create(raw);
+    }
 }

@@ -22,6 +22,8 @@ namespace ActionView.Core.Models;
 [JsonSerializable(typeof(TimelineEvent))]
 [JsonSerializable(typeof(TabItem))]
 [JsonSerializable(typeof(ChartSeries))]
+[JsonSerializable(typeof(EntryValidationResult))]
+[JsonSerializable(typeof(ValidationDiagnostic))]
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

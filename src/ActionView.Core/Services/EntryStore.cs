@@ -15,6 +15,8 @@ public sealed class EntryStore : IDisposable
     private readonly string _dataDirectory;
     private readonly ILogger<EntryStore> _logger;
     private readonly EntryNormalizer? _normalizer;
+    private readonly EntryValidator? _validator;
+    private readonly bool _strictIngest;
     private readonly ConcurrentDictionary<string, Entry> _activeCache = new();
     private readonly ConcurrentDictionary<string, byte> _internalDeletions = new();
     private FileSystemWatcher? _activeWatcher;
@@ -46,11 +48,18 @@ public sealed class EntryStore : IDisposable
     private string ArchiveDir => Path.Combine(_dataDirectory, "archive");
     private string ErrorsDir => Path.Combine(_dataDirectory, "errors");
 
-    public EntryStore(string dataDirectory, ILogger<EntryStore> logger, EntryNormalizer? normalizer = null)
+    public EntryStore(
+        string dataDirectory,
+        ILogger<EntryStore> logger,
+        EntryNormalizer? normalizer = null,
+        EntryValidator? validator = null,
+        bool strictIngest = false)
     {
         _dataDirectory = dataDirectory;
         _logger = logger;
         _normalizer = normalizer;
+        _validator = validator;
+        _strictIngest = strictIngest;
         LoadActiveEntries();
     }
 
@@ -201,7 +210,17 @@ public sealed class EntryStore : IDisposable
     public Entry? PickupInboxFile(string filePath)
     {
         var json = File.ReadAllText(filePath);
-        var entry = JsonSerializer.Deserialize<Entry>(json, ReadOptions);
+
+        Entry? entry;
+        try
+        {
+            entry = JsonSerializer.Deserialize<Entry>(json, ReadOptions);
+        }
+        catch (JsonException ex)
+        {
+            MoveToErrors(filePath, DescribeFailure(json, ex));
+            return null;
+        }
 
         if (entry is null)
         {
@@ -223,6 +242,19 @@ public sealed class EntryStore : IDisposable
         {
             MoveToErrors(filePath, $"Unsupported schema version: {entry.SchemaVersion}. Expected: 1");
             return null;
+        }
+
+        // Opt-in strict validation (global default or per-type template). Non-strict ingest
+        // keeps today's behavior; strict rejects imperfect entries with a precise reason
+        // instead of shipping them with only a logged warning.
+        if (ShouldStrictlyValidate(entry.Type))
+        {
+            var validation = _validator!.Validate(json, new EntryValidationOptions { Strict = true });
+            if (!validation.Ok)
+            {
+                MoveToErrors(filePath, EntryValidator.FormatDiagnostics(validation));
+                return null;
+            }
         }
 
         // Enrich with backend metadata
@@ -271,6 +303,21 @@ public sealed class EntryStore : IDisposable
         }
 
         entry.SchemaVersion = "1";
+
+        // Opt-in strict validation (global default or per-type template). Surfaces that
+        // want to return the structured report (MCP/REST) validate the raw JSON first;
+        // this is the backstop for direct/object callers and the file-drop path.
+        if (ShouldStrictlyValidate(entry.Type))
+        {
+            var json = JsonSerializer.Serialize(entry, WriteOptions);
+            var validation = _validator!.Validate(json, new EntryValidationOptions { Strict = true });
+            if (!validation.Ok)
+            {
+                _logger.LogWarning("Rejected strict ingest for '{Title}': {Reason}",
+                    entry.Title, EntryValidator.FormatDiagnostics(validation));
+                return null;
+            }
+        }
 
         // Enrich with backend metadata
         if (string.IsNullOrWhiteSpace(entry.Id))
@@ -492,6 +539,28 @@ public sealed class EntryStore : IDisposable
         var filePath = Path.Combine(ActiveDir, $"{entry.Id}.json");
         var json = JsonSerializer.Serialize(entry, WriteOptions);
         File.WriteAllText(filePath, json);
+    }
+
+    /// <summary>
+    /// True when the given entry type should be validated strictly at ingest,
+    /// either because of the global default or the type's template opting in.
+    /// </summary>
+    private bool ShouldStrictlyValidate(string type)
+        => _validator is not null && (_strictIngest || (_normalizer?.IsStrictType(type) ?? false));
+
+    /// <summary>
+    /// Produces a precise failure reason for an unparseable / unbindable inbox file,
+    /// using schema validation when available and falling back to the raw exception.
+    /// </summary>
+    private string DescribeFailure(string json, JsonException ex)
+    {
+        if (_validator is not null)
+        {
+            var validation = _validator.Validate(json, new EntryValidationOptions { Strict = false });
+            if (!validation.Ok)
+                return EntryValidator.FormatDiagnostics(validation);
+        }
+        return ex.Message;
     }
 
     private void MoveToErrors(string filePath, string errorMessage)

@@ -90,7 +90,8 @@ actionview [command] [options] --config path/to/actionview.json
 
 | Command | Description |
 |---------|-------------|
-| `add [-f <file>] [-j <json>]` | Add a JSON entry to the inbox (accepts file, inline JSON, or stdin) |
+| `add [-f <file>] [-j <json>] [--set k=v] [--group-id <id>] [--group-label <s>] [--priority <n>] [--pin] [--wait] [--strict]` | Add a JSON entry to the inbox (accepts file, inline JSON, or stdin). `--set`/`--group-id`/etc. patch top-level fields at submit time; `--wait` validates synchronously and fails fast instead of discovering errors later in `errors/`. |
+| `validate [-f <file>] [-j <json>] [--type <t>] [--strict]` | Validate an entry against the schema + its type template **without** adding it. Prints `{ ok, errors[], warnings[] }` and exits non-zero on failure. |
 | `list [--type] [--severity] [--source] [--search] [--tags] [--tag-mode any\|all] [--sort created\|priority\|severity\|title] [--dir asc\|desc] [--view <id\|name>]` | List active entries in a table |
 | `dismiss <id>` | Archive an entry (supports partial ID matching) |
 | `delete <id> [-f\|--force]` | Permanently delete an entry |
@@ -157,7 +158,8 @@ Or with `dnx` (no prior install needed):
 | `get_template` | read | Get a template's full definition |
 | `get_stats` | read | Get dashboard statistics |
 | `get_schema` | read | Get the entry JSON schema |
-| `add_entry` | write | Add a new entry to the review queue |
+| `validate_entry` | read | Validate candidate entry JSON against the schema + type template without adding it; returns `{ ok, errors[], warnings[] }` with JSON paths |
+| `add_entry` | write | Add a new entry to the review queue (validates first; returns a structured report on failure) |
 | `dismiss_entry` | write | Dismiss/archive an active entry |
 | `delete_entry` | write | Permanently delete an active entry |
 | `pin_entry` | write | Toggle pin on an active entry |
@@ -201,6 +203,8 @@ The server exposes these endpoints:
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/entries` | List active entries (query: `type`, `severity`, `source`, `tags`, `tagMode`, `search`, `sort`, `dir`) |
+| `POST` | `/api/entries` | Ingest an entry (raw JSON body). On failure returns `400` with `{ error: "validation_failed", validation: { ok, errors[], warnings[] } }`. |
+| `POST` | `/api/entries/validate` | Validate an entry (raw JSON body) **without** ingesting. Query: `strict`, `includeNormalized`. Returns `{ ok, errors[], warnings[] }`. |
 | `GET` | `/api/entries/{id}` | Get entry detail (marks as viewed) |
 | `POST` | `/api/entries/{id}/actions/{actionIndex}` | Execute an entry action |
 | `POST` | `/api/entries/{entryId}/sections/{sectionIndex}/actions/{actionIndex}` | Execute a section action |
@@ -218,6 +222,35 @@ The server exposes these endpoints:
 
 A SignalR hub is available at `/hubs/entries` and broadcasts `EntriesAdded`, `EntryUpdated`, `EntryArchived`, and `EntryDeleted` events.
 
+## Validation
+
+Entries are validated against the published [entry schema](schemas/entry.v1.schema.json) (JSON Schema draft 2020-12) plus, if one is registered, the entry type's template. The same pipeline backs the CLI `validate` command, the MCP `validate_entry` tool, and `POST /api/entries/validate`.
+
+The intended flow for producers — especially LLM agents — is **emit → validate → fix**, rather than reasoning about the whole schema up front:
+
+1. Emit a best-effort entry.
+2. Validate it (`validate_entry` / `actionview validate` / `POST /api/entries/validate`).
+3. Fix the reported errors and resubmit.
+
+The report is compact and machine-readable so the loop stays cheap:
+
+```json
+{
+  "ok": false,
+  "errors": [
+    { "path": "/severity", "code": "schema.enum", "message": "Value should match one of the values specified by the enum" },
+    { "path": "/content/0", "code": "schema.required", "message": "Required properties [\"type\"] are not present" }
+  ],
+  "warnings": [
+    { "path": "/content", "code": "block.missingRequired", "message": "Missing required 'keyValue' content block 'Pull Request Details' expected by the 'pr-review' template." }
+  ]
+}
+```
+
+- **Errors** block ingestion. **Warnings** are advisory and, by default, do **not** block — they surface template issues (missing required blocks, disallowed tags) without dropping the entry.
+- Set **strict** (`--strict`, `?strict=true`, template `strict`, or `ingest.strict`) to promote warnings to errors and reject imperfect entries into `errors/` with the same structured reason.
+- `includeNormalized` (off by default) echoes the normalized entry; leave it off to keep responses token-cheap for large entries.
+
 ## Configuration
 
 ActionView is configured via a `actionview.json` file:
@@ -226,6 +259,9 @@ ActionView is configured via a `actionview.json` file:
 {
   "dataDirectory": "data",
   "tagMatchMode": "any",
+  "ingest": {
+    "strict": false
+  },
   "views": [
     { "id": "work", "name": "Work", "icon": "briefcase", "tags": ["work"] },
     { "id": "personal", "name": "Personal", "icon": "user", "tags": ["personal"] },
@@ -251,6 +287,7 @@ ActionView is configured via a `actionview.json` file:
 |-------|------|---------|-------------|
 | `dataDirectory` | string | `~/.actionview/` | Root directory containing `inbox/`, `active/`, `archive/`, and `errors/` subdirectories. Relative paths are resolved against the config file location. |
 | `tagMatchMode` | `"any"` \| `"all"` | `any` | Default combine mode for multi-tag filters: `any` (OR) or `all` (AND). A per-view `tagMatch` and the dashboard's Any/All toggle override it. |
+| `ingest.strict` | bool | `false` | When true, entries that fail schema validation or produce normalization warnings (e.g. a missing required content block, a disallowed tag) are rejected at ingest and routed to `errors/` with a precise reason, instead of shipping with a logged warning. The non-destructive default preserves ActionView's promise never to silently drop a review item; strict producers opt in per submission (`--strict`, `?strict=true`, `strict:true`), per type (template `strict`), or globally here. |
 | `views` | object[] | `[]` | Saved filter presets ("views"). Each: `id`, `name`, optional `icon` (Lucide name), `type`, `tags` (string[]), and `tagMatch` (`any`/`all`). Editable from the dashboard, which persists changes back to this file. The built-in **All** view is always present and not stored here. |
 | `notifications.enabled` | bool | `true` | Enable Windows toast notifications when new entries arrive. |
 | `secrets` | object | `{}` | Key-value map of secrets used in action command placeholders. |

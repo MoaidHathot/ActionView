@@ -20,14 +20,36 @@ public sealed class EntryWriteTools
 
     [McpServerTool(Name = "add_entry"), Description(
         "Add a new entry to the ActionView review queue. " +
-        "The entry is ingested, normalized against its type template, and made active. " +
+        "The entry is validated against the schema + type template, normalized, and made active. " +
         "Required fields: type, source, title. " +
-        "Use get_schema to see the full entry JSON schema.")]
+        "On validation failure the response is { success:false, error:'validation_failed', validation:{ ok, errors[], warnings[] } } " +
+        "with precise JSON paths — fix those and retry (cheaper than reasoning about the full schema). " +
+        "Set strict=true to also reject entries with warnings (e.g. a missing required content block).")]
     public static string AddEntry(
         EntryStore entryStore,
+        EntryValidator validator,
+        AppConfig config,
         JsonSerializerOptions jsonOptions,
-        [Description("The entry JSON string containing at minimum: type, source, and title fields")] string entryJson)
+        [Description("The entry JSON string containing at minimum: type, source, and title fields")] string entryJson,
+        [Description("Treat validation warnings as errors (reject imperfect entries). Default false.")] bool strict = false)
     {
+        // Validate first so the caller gets a precise, structured report to retry against
+        // instead of an opaque failure discovered later in errors/.
+        var validation = validator.Validate(entryJson, new EntryValidationOptions
+        {
+            Strict = strict || config.Ingest.Strict
+        });
+
+        if (!validation.Ok)
+        {
+            return JsonSerializer.Serialize(new
+            {
+                success = false,
+                error = "validation_failed",
+                validation
+            }, jsonOptions);
+        }
+
         Entry? entry;
         try
         {
@@ -40,13 +62,6 @@ public sealed class EntryWriteTools
 
         if (entry is null)
             return JsonSerializer.Serialize(new { error = "Failed to deserialize entry" }, jsonOptions);
-
-        if (string.IsNullOrWhiteSpace(entry.Type) ||
-            string.IsNullOrWhiteSpace(entry.Source) ||
-            string.IsNullOrWhiteSpace(entry.Title))
-        {
-            return JsonSerializer.Serialize(new { error = "Missing required fields: type, source, and title" }, jsonOptions);
-        }
 
         var result = entryStore.IngestEntry(entry);
         if (result is null)

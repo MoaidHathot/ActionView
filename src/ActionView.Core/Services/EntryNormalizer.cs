@@ -21,20 +21,31 @@ public sealed class EntryNormalizer
     }
 
     /// <summary>
-    /// Normalize an entry against its type template.
-    /// If no template exists for the entry type, returns the entry unchanged.
+    /// Normalize an entry against its type template, returning any findings
+    /// (e.g. missing required content blocks, disallowed tags) as diagnostics.
+    /// If no template exists for the entry type, returns no findings and leaves
+    /// the entry unchanged.
     /// </summary>
-    public Entry Normalize(Entry entry)
+    public IReadOnlyList<ValidationDiagnostic> Normalize(Entry entry)
     {
         var template = _registry.GetTemplate(entry.Type);
         if (template is null)
-            return entry;
+            return [];
 
+        var findings = new List<ValidationDiagnostic>();
         ApplyDefaults(entry, template);
-        NormalizeContentBlocks(entry, template);
+        NormalizeTags(entry, template, findings);
+        NormalizeContentBlocks(entry, template, findings);
 
-        return entry;
+        return findings;
     }
+
+    /// <summary>
+    /// True when the type's template opts into strict enforcement, so validation
+    /// warnings should be treated as blocking errors even when the global default
+    /// is non-strict.
+    /// </summary>
+    public bool IsStrictType(string type) => _registry.GetTemplate(type)?.Strict ?? false;
 
     private void ApplyDefaults(Entry entry, EntryTemplate template)
     {
@@ -58,7 +69,7 @@ public sealed class EntryNormalizer
         }
     }
 
-    private void NormalizeContentBlocks(Entry entry, EntryTemplate template)
+    private void NormalizeContentBlocks(Entry entry, EntryTemplate template, List<ValidationDiagnostic> findings)
     {
         // Normalize individual blocks (key aliases, section title aliases)
         foreach (var block in entry.Content)
@@ -69,19 +80,87 @@ public sealed class EntryNormalizer
         // Reorder content blocks to match template order
         ReorderBlocks(entry, template);
 
-        // Log warnings for missing required blocks
+        // Record findings for missing required blocks (and log a warning for operators)
         foreach (var templateBlock in template.ContentTemplate.Where(t => t.Required))
         {
             var found = FindMatchingBlock(entry.Content, templateBlock);
             if (found is null)
             {
+                var label = templateBlock.Label ?? templateBlock.Title;
                 _logger.LogWarning(
                     "Entry {Id} (type: {Type}) is missing required {BlockType} block{Label}",
                     entry.Id, entry.Type, templateBlock.Type,
-                    templateBlock.Label is not null ? $" '{templateBlock.Label}'" :
-                    templateBlock.Title is not null ? $" '{templateBlock.Title}'" : "");
+                    label is not null ? $" '{label}'" : "");
+
+                findings.Add(new ValidationDiagnostic
+                {
+                    Path = "/content",
+                    Code = "block.missingRequired",
+                    Message = $"Missing required '{templateBlock.Type}' content block"
+                        + (label is not null ? $" '{label}'" : "")
+                        + $" expected by the '{entry.Type}' template.",
+                    Severity = ValidationSeverity.Warning
+                });
             }
         }
+    }
+
+    /// <summary>
+    /// Normalizes tag spelling for consistency: trims, applies template tag aliases,
+    /// optional case-folding, and de-duplicates. Tags outside an optional allow-list are
+    /// flagged as warnings but never dropped.
+    /// </summary>
+    private void NormalizeTags(Entry entry, EntryTemplate template, List<ValidationDiagnostic> findings)
+    {
+        if (entry.Tags.Count == 0)
+            return;
+
+        var caseFold = template.TagCaseMode == TagCaseMode.Lower;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var normalized = new List<string>(entry.Tags.Count);
+
+        foreach (var raw in entry.Tags)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                continue;
+
+            var tag = raw.Trim();
+
+            // Alias mapping (case-insensitive), analogous to keyValue KeyAliases.
+            if (template.TagAliases is not null)
+            {
+                foreach (var (alias, canonical) in template.TagAliases)
+                {
+                    if (string.Equals(tag, alias, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogDebug("Normalized tag '{Old}' -> '{New}' in entry {Id}", tag, canonical, entry.Id);
+                        tag = canonical;
+                        break;
+                    }
+                }
+            }
+
+            if (caseFold)
+                tag = tag.ToLowerInvariant();
+
+            // Allow-list: flag but do not strip, so information is never lost.
+            if (template.AllowedTags is { Count: > 0 } &&
+                !template.AllowedTags.Any(a => string.Equals(a, tag, StringComparison.OrdinalIgnoreCase)))
+            {
+                findings.Add(new ValidationDiagnostic
+                {
+                    Path = "/tags",
+                    Code = "tag.notAllowed",
+                    Message = $"Tag '{tag}' is not in the allowed set for type '{entry.Type}'.",
+                    Severity = ValidationSeverity.Warning
+                });
+            }
+
+            if (seen.Add(tag))
+                normalized.Add(tag);
+        }
+
+        entry.Tags = normalized;
     }
 
     private void NormalizeBlock(ContentBlock block, EntryTemplate template, string entryId)

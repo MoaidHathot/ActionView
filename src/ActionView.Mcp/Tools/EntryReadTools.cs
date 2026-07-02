@@ -67,4 +67,27 @@ public sealed class EntryReadTools
 
         return JsonSerializer.Serialize(new { error = $"Entry not found: {id}" }, jsonOptions);
     }
+
+    [McpServerTool(Name = "validate_entry", ReadOnly = true), Description(
+        "Validate a candidate entry JSON against the ActionView schema and its type template " +
+        "WITHOUT adding it. Returns { ok, errors[], warnings[] } where each item has a JSON path, " +
+        "a stable code (e.g. schema.enum, schema.required, block.missingRequired), and a message. " +
+        "Prefer this over reasoning about the full schema: submit best-effort JSON, then fix the " +
+        "reported errors and retry. Set strict=true to also treat warnings (e.g. a missing required " +
+        "content block) as failures.")]
+    public static string ValidateEntry(
+        EntryValidator validator,
+        JsonSerializerOptions jsonOptions,
+        [Description("The candidate entry JSON string to validate")] string entryJson,
+        [Description("Treat warnings (e.g. missing required content blocks) as errors. Default false.")] bool strict = false,
+        [Description("Include the normalized entry in the response. Default false to keep the response small.")] bool includeNormalized = false)
+    {
+        var result = validator.Validate(entryJson, new EntryValidationOptions
+        {
+            Strict = strict,
+            IncludeNormalized = includeNormalized
+        });
+
+        return JsonSerializer.Serialize(result, jsonOptions);
+    }
 }

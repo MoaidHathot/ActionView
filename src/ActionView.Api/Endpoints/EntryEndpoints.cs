@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using ActionView.Core.Models;
 using ActionView.Core.Services;
 using Microsoft.AspNetCore.SignalR;
@@ -7,6 +9,16 @@ namespace ActionView.Api.Endpoints;
 
 public static class EntryEndpoints
 {
+    // Matches the camelCase + enum conventions used across ActionView when binding
+    // the raw request body for POST /api/entries.
+    private static readonly JsonSerializerOptions EntryJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+    };
+
     public static void MapEntryEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/entries");
@@ -37,15 +49,63 @@ public static class EntryEndpoints
         });
 
         // --- Create entry via webhook (POST /api/entries) ---
-        group.MapPost("/", async (Entry entry, EntryStore store,
-            IHubContext<EntryHub, IEntryHubClient> hubContext) =>
+        // Accepts the raw JSON body so validation errors can be returned with precise
+        // JSON paths (a bound Entry would fail model-binding before this code runs).
+        group.MapPost("/", async (JsonElement body, EntryStore store, EntryValidator validator,
+            AppConfig config, IHubContext<EntryHub, IEntryHubClient> hubContext) =>
         {
+            var raw = body.GetRawText();
+
+            // Strict mode: block on any schema/normalization problem and return the report.
+            if (config.Ingest.Strict)
+            {
+                var strictResult = validator.Validate(raw, new EntryValidationOptions { Strict = true });
+                if (!strictResult.Ok)
+                    return Results.BadRequest(new { error = "validation_failed", validation = strictResult });
+            }
+
+            Entry? entry;
+            try
+            {
+                entry = JsonSerializer.Deserialize<Entry>(raw, EntryJsonOptions);
+            }
+            catch (JsonException)
+            {
+                // Non-destructive default: only hard (unbindable) input is rejected, but with
+                // a precise, structured reason instead of an opaque parser message.
+                var report = validator.Validate(raw, new EntryValidationOptions { Strict = false });
+                return Results.BadRequest(new { error = "validation_failed", validation = report });
+            }
+
+            if (entry is null)
+                return Results.BadRequest(new { error = "Entry could not be parsed." });
+
             var ingested = store.IngestEntry(entry);
             if (ingested is null)
+            {
+                var report = validator.Validate(raw, new EntryValidationOptions { Strict = config.Ingest.Strict });
+                if (!report.Ok)
+                    return Results.BadRequest(new { error = "validation_failed", validation = report });
                 return Results.BadRequest(new { error = "Invalid entry. Required fields: type, source, title." });
+            }
 
             await hubContext.Clients.All.EntriesAdded(new List<Entry> { ingested });
             return Results.Created($"/api/entries/{ingested.Id}", ingested);
+        });
+
+        // --- Validate an entry without ingesting (POST /api/entries/validate) ---
+        // The "retry oracle": submit best-effort JSON, get { ok, errors[], warnings[] } back,
+        // fix, resubmit — no persistence, no side effects.
+        group.MapPost("/validate", (JsonElement body, EntryValidator validator, AppConfig config,
+            bool? strict, bool? includeNormalized) =>
+        {
+            var result = validator.Validate(body.GetRawText(), new EntryValidationOptions
+            {
+                Strict = strict ?? config.Ingest.Strict,
+                IncludeNormalized = includeNormalized ?? false
+            });
+
+            return Results.Ok(result);
         });
 
         // --- Batch create entries via webhook (POST /api/entries/batch) ---

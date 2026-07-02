@@ -11,13 +11,19 @@ public class McpEntryWriteToolsTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly EntryStore _store;
+    private readonly EntryValidator _validator;
+    private readonly AppConfig _config;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public McpEntryWriteToolsTests()
     {
         _tempDir = Path.Combine(Path.GetTempPath(), $"actionview_mcp_write_{Guid.NewGuid():N}");
         ConfigLoader.EnsureDirectories(_tempDir);
-        _store = new EntryStore(_tempDir, NullLogger<EntryStore>.Instance);
+        var registry = new TemplateRegistry(_tempDir, NullLogger<TemplateRegistry>.Instance);
+        var normalizer = new EntryNormalizer(registry, NullLogger<EntryNormalizer>.Instance);
+        _validator = new EntryValidator(normalizer);
+        _config = new AppConfig { DataDirectory = _tempDir };
+        _store = new EntryStore(_tempDir, NullLogger<EntryStore>.Instance, normalizer, _validator);
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -53,7 +59,7 @@ public class McpEntryWriteToolsTests : IDisposable
     {
         var entryJson = """{"type":"test","source":"mcp-test","title":"MCP Entry"}""";
 
-        var result = EntryWriteTools.AddEntry(_store, _jsonOptions, entryJson);
+        var result = EntryWriteTools.AddEntry(_store, _validator, _config, _jsonOptions, entryJson);
         var doc = JsonDocument.Parse(result);
 
         Assert.True(doc.RootElement.GetProperty("success").GetBoolean());
@@ -66,24 +72,35 @@ public class McpEntryWriteToolsTests : IDisposable
     }
 
     [Fact]
-    public void AddEntry_ReturnsErrorForInvalidJson()
+    public void AddEntry_ReturnsValidationFailedForInvalidJson()
     {
-        var result = EntryWriteTools.AddEntry(_store, _jsonOptions, "not json");
+        var result = EntryWriteTools.AddEntry(_store, _validator, _config, _jsonOptions, "not json");
         var doc = JsonDocument.Parse(result);
 
-        Assert.True(doc.RootElement.TryGetProperty("error", out var error));
-        Assert.Contains("Invalid JSON", error.GetString());
+        Assert.False(doc.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal("validation_failed", doc.RootElement.GetProperty("error").GetString());
+
+        var errors = doc.RootElement.GetProperty("validation").GetProperty("errors");
+        Assert.Equal("json.parse", errors[0].GetProperty("code").GetString());
     }
 
     [Fact]
-    public void AddEntry_ReturnsErrorForMissingRequiredFields()
+    public void AddEntry_ReturnsValidationFailedForMissingRequiredFields()
     {
-        var result = EntryWriteTools.AddEntry(_store, _jsonOptions,
+        var result = EntryWriteTools.AddEntry(_store, _validator, _config, _jsonOptions,
             """{"type":"test","source":"","title":""}""");
         var doc = JsonDocument.Parse(result);
 
-        Assert.True(doc.RootElement.TryGetProperty("error", out var error));
-        Assert.Contains("required fields", error.GetString());
+        Assert.False(doc.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal("validation_failed", doc.RootElement.GetProperty("error").GetString());
+
+        // Empty required fields are caught by the schema (minLength) with precise paths.
+        var errors = doc.RootElement.GetProperty("validation").GetProperty("errors");
+        var paths = errors.EnumerateArray()
+            .Select(e => e.GetProperty("path").GetString())
+            .ToList();
+        Assert.Contains("/source", paths);
+        Assert.Contains("/title", paths);
     }
 
     // --- dismiss_entry ---

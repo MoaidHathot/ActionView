@@ -46,11 +46,15 @@ builder.Services.AddSingleton<EntryNormalizer>(sp =>
     new EntryNormalizer(
         sp.GetRequiredService<TemplateRegistry>(),
         sp.GetRequiredService<ILogger<EntryNormalizer>>()));
+builder.Services.AddSingleton<EntryValidator>(sp =>
+    new EntryValidator(sp.GetRequiredService<EntryNormalizer>()));
 builder.Services.AddSingleton<EntryStore>(sp =>
     new EntryStore(
         config.DataDirectory,
         sp.GetRequiredService<ILogger<EntryStore>>(),
-        sp.GetRequiredService<EntryNormalizer>()));
+        sp.GetRequiredService<EntryNormalizer>(),
+        sp.GetRequiredService<EntryValidator>(),
+        config.Ingest.Strict));
 
 // Register MCP server with stdio transport
 var mcpBuilder = builder.Services

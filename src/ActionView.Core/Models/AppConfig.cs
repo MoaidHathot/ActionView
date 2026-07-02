@@ -20,6 +20,9 @@ public sealed class AppConfig
     /// <summary>Template auto-discovery settings.</summary>
     public TemplatesConfig Templates { get; set; } = new();
 
+    /// <summary>Ingest-time validation settings.</summary>
+    public IngestConfig Ingest { get; set; } = new();
+
     /// <summary>
     /// Local-file access settings used by the /api/files endpoint to serve
     /// images and other assets that entries reference via file:// URLs.
@@ -155,6 +158,24 @@ public sealed class TemplatesConfig
     /// Default: false (only top-level .json files are scanned).
     /// </summary>
     public bool Recursive { get; set; }
+}
+
+/// <summary>
+/// Ingest-time validation settings.
+/// </summary>
+public sealed class IngestConfig
+{
+    /// <summary>
+    /// When true, entries that fail JSON-Schema validation or produce normalization
+    /// warnings (e.g. a missing required content block, a disallowed tag) are rejected
+    /// at ingest and routed to <c>errors/</c> with a precise reason, instead of shipping
+    /// with only a logged warning.
+    ///
+    /// Default: false. The non-destructive default preserves ActionView's promise never
+    /// to silently drop a human-review item; strict producers (or the emit → validate →
+    /// fix loop) opt in per submission, per type (template <c>strict</c>), or globally here.
+    /// </summary>
+    public bool Strict { get; set; }
 }
 
 /// <summary>

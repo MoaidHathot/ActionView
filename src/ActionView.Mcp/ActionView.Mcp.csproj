@@ -22,8 +22,4 @@
     <Authors>ActionView</Authors>
   </PropertyGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="..\..\schemas\entry.v1.schema.json" LogicalName="entry.v1.schema.json" />
-  </ItemGroup>
-
 </Project>

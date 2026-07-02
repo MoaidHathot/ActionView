@@ -21,14 +21,8 @@ public sealed class StatsTools
 
     [McpServerTool(Name = "get_schema", ReadOnly = true), Description(
         "Get the JSON schema for ActionView entries. " +
-        "Use this to understand the full entry structure when constructing entries for add_entry.")]
-    public static string GetSchema()
-    {
-        using var stream = typeof(StatsTools).Assembly.GetManifestResourceStream("entry.v1.schema.json");
-        if (stream is null)
-            return """{"error": "Embedded schema resource not found"}""";
-
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
-    }
+        "Use this to understand the full entry structure when constructing entries for add_entry. " +
+        "Tip: for large or complex entries, prefer validate_entry (submit best-effort JSON and fix the " +
+        "reported errors) rather than reasoning about this entire schema up front.")]
+    public static string GetSchema() => EntrySchemaProvider.RawJson;
 }
