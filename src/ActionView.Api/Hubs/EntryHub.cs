@@ -36,4 +36,13 @@ public interface IEntryHubClient
     /// actionview.json. Clients re-fetch the slices they mirror (views + config).
     /// </summary>
     Task ConfigChanged();
+
+    /// <summary>A background action job started running.</summary>
+    Task ActionJobStarted(ActionJob job);
+
+    /// <summary>A streamed output line from a running action job.</summary>
+    Task ActionJobProgress(string jobId, string line);
+
+    /// <summary>A background action job reached a terminal state (succeeded/failed/cancelled).</summary>
+    Task ActionJobFinished(ActionJob job);
 }

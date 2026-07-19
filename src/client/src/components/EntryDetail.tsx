@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Trash2, X, Edit3, Pin, PinOff, Search, Download, Eye, History } from 'lucide-react';
-import type { Entry, ActionEvent } from '../types';
+import { Trash2, X, Edit3, Pin, PinOff, Search, Download, Eye, History, Pencil } from 'lucide-react';
+import type { Entry, ActionEvent, ContentBlock } from '../types';
 import type { UndoItem } from './UndoToast';
 import { BlockRenderer } from './content-blocks/BlockRenderer';
 import { ActionButton } from './ActionButton';
@@ -13,13 +13,24 @@ import { api } from '../api/client';
 import { createUndoItem } from './UndoToast';
 import { useBlockUiState } from '../hooks/useBlockUiState';
 import { deriveMarkers } from '../utils/markers';
+import { expandRefs } from '../utils/refExpand';
+import { useActionJobs } from '../context/ActionJobsProvider';
 import { entryToMarkdown, entryToHtml, downloadFile } from '../utils/exportEntry';
+
+/** True when any block (at any depth) has been edited from the dashboard. */
+function contentHasEdits(blocks: ContentBlock[] | undefined): boolean {
+  if (!blocks) return false;
+  for (const b of blocks) {
+    if (b.edited) return true;
+    if (contentHasEdits(b.content)) return true;
+  }
+  return false;
+}
 
 interface Props {
   entry: Entry;
   onDismiss: (id: string) => void;
   onDelete: (id: string) => void;
-  onActionExecuted: () => void;
   onEntryUpdated: (entry: Entry) => void;
   onUndoCreated?: (item: UndoItem) => void;
   defaultUndoWindow: number;
@@ -34,7 +45,7 @@ interface OrderedBlock {
 }
 
 export function EntryDetail({
-  entry, onDismiss, onDelete, onActionExecuted, onEntryUpdated, onUndoCreated, defaultUndoWindow,
+  entry, onDismiss, onDelete, onEntryUpdated, onUndoCreated, defaultUndoWindow,
 }: Props) {
   const [actionResult, setActionResult] = useState<{ success: boolean; message: string } | null>(null);
   const [editing, setEditing] = useState(false);
@@ -46,10 +57,16 @@ export function EntryDetail({
 
   const contentRef = useRef<HTMLDivElement>(null);
   const { pinned, hidden, togglePinned, toggleHidden, unhideAll } = useBlockUiState(entry.id);
+  const { jobs, upsert } = useActionJobs();
 
   // Outcome markers derived from the audit history (generic: any action's
   // label/style becomes a per-target status chip once it has run).
   const markers = useMemo(() => deriveMarkers(history), [history]);
+  const hasEdits = useMemo(() => contentHasEdits(entry.content), [entry.content]);
+  const expandRef = useCallback(
+    (text: string, self?: ContentBlock) => expandRefs(text, entry, self),
+    [entry],
+  );
 
   const reloadHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -62,14 +79,40 @@ export function EntryDetail({
     }
   }, [entry.id]);
 
+  // Track which finished jobs we've already surfaced (reset per entry).
+  const processedJobs = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     setActionResult(null);
     setEditing(false);
     setSearchOpen(false);
     setExportMenuOpen(false);
     setActivityOpen(false);
+    processedJobs.current = new Set();
     void reloadHistory();
   }, [entry.id, reloadHistory]);
+
+  // When a background job for this entry finishes, surface the result, reload
+  // the activity/markers, and create an undo toast if the action supports it.
+  useEffect(() => {
+    let sawTerminal = false;
+    for (const job of jobs.values()) {
+      if (job.entryId !== entry.id) continue;
+      const terminal = job.status === 'succeeded' || job.status === 'failed' || job.status === 'cancelled';
+      if (!terminal || processedJobs.current.has(job.id)) continue;
+      processedJobs.current.add(job.id);
+      sawTerminal = true;
+      setActionResult({ success: job.status === 'succeeded', message: job.message ?? job.status });
+      if (job.status === 'succeeded') {
+        const action = entry.actions.find((a) => a.label === job.actionLabel);
+        if (action?.undoCommand && onUndoCreated) {
+          const windowSec = action.undoWindowSeconds ?? defaultUndoWindow;
+          onUndoCreated(createUndoItem(entry.id, entry.title, action.label, windowSec));
+        }
+      }
+    }
+    if (sawTerminal) void reloadHistory();
+  }, [jobs, entry.id, entry.actions, entry.title, onUndoCreated, defaultUndoWindow, reloadHistory]);
 
   // Deep-link anchor (#block-N): scroll once after first render.
   useEffect(() => {
@@ -88,35 +131,27 @@ export function EntryDetail({
 
   const handleAction = useCallback(async (actionIndex: number, parameters?: Record<string, string>) => {
     try {
-      const action = entry.actions[actionIndex];
-      const result = await api.executeAction(entry.id, actionIndex, parameters);
-      setActionResult({ success: result.success, message: result.message ?? '' });
+      const job = await api.executeAction(entry.id, actionIndex, parameters);
+      upsert(job);
       void reloadHistory();
-      if (result.success) {
-        if (action.undoCommand && onUndoCreated) {
-          const windowSec = action.undoWindowSeconds ?? defaultUndoWindow;
-          onUndoCreated(createUndoItem(entry.id, entry.title, action.label, windowSec));
-        }
-        onActionExecuted();
-      }
+      return job;
     } catch (err) {
       setActionResult({ success: false, message: String(err) });
-      void reloadHistory();
       throw err;
     }
-  }, [entry, onActionExecuted, onUndoCreated, defaultUndoWindow, reloadHistory]);
+  }, [entry.id, upsert, reloadHistory]);
 
   const handleBlockAction = useCallback(async (path: number[], actionIndex: number, parameters?: Record<string, string>) => {
     try {
-      const result = await api.executeSectionAction(entry.id, path, actionIndex, parameters);
-      setActionResult({ success: result.success, message: result.message ?? '' });
+      const job = await api.executeSectionAction(entry.id, path, actionIndex, parameters);
+      upsert(job);
       void reloadHistory();
+      return job;
     } catch (err) {
       setActionResult({ success: false, message: String(err) });
-      void reloadHistory();
       throw err;
     }
-  }, [entry.id, reloadHistory]);
+  }, [entry.id, upsert, reloadHistory]);
 
   const handleDismiss = useCallback(async () => {
     try { await api.dismissEntry(entry.id); onDismiss(entry.id); }
@@ -257,6 +292,15 @@ export function EntryDetail({
           {entry.priority > 0 && (
             <span className="entry-priority-badge">Priority {entry.priority}</span>
           )}
+          {hasEdits && (
+            <button
+              className="entry-edited-badge"
+              onClick={() => setActivityOpen(true)}
+              title="This entry has edited content — open Activity"
+            >
+              <Pencil size={11} /> edited
+            </button>
+          )}
         </div>
         <EntrySearch
           containerRef={contentRef}
@@ -290,6 +334,8 @@ export function EntryDetail({
                   blockKey={blockKey}
                   onBlockAction={handleBlockAction}
                   markers={markers}
+                  onEntryChanged={onEntryUpdated}
+                  expandRef={expandRef}
                 />
               </EntryErrorBoundary>
             </BlockShell>
@@ -326,6 +372,7 @@ export function EntryDetail({
               action={action}
               draftKey={`${entry.id}.${i}`}
               marker={markers.byEntryAction.get(action.label)}
+              expandDefault={(t) => expandRefs(t, entry)}
               onClick={(parameters) => handleAction(i, parameters)}
             />
           ))}

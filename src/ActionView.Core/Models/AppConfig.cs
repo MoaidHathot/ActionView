@@ -23,6 +23,9 @@ public sealed class AppConfig
     /// <summary>Ingest-time validation settings.</summary>
     public IngestConfig Ingest { get; set; } = new();
 
+    /// <summary>Background action-execution settings (concurrency, timeout, output tail).</summary>
+    public ActionsConfig Actions { get; set; } = new();
+
     /// <summary>
     /// Local-file access settings used by the /api/files endpoint to serve
     /// images and other assets that entries reference via file:// URLs.
@@ -175,8 +178,7 @@ public sealed class TemplatesConfig
 /// Ingest-time validation settings.
 /// </summary>
 public sealed class IngestConfig
-{
-    /// <summary>
+{    /// <summary>
     /// When true, entries that fail JSON-Schema validation or produce normalization
     /// warnings (e.g. a missing required content block, a disallowed tag) are rejected
     /// at ingest and routed to <c>errors/</c> with a precise reason, instead of shipping
@@ -187,6 +189,24 @@ public sealed class IngestConfig
     /// fix loop) opt in per submission, per type (template <c>strict</c>), or globally here.
     /// </summary>
     public bool Strict { get; set; }
+}
+
+/// <summary>
+/// Settings for background action execution (jobs).
+/// </summary>
+public sealed class ActionsConfig
+{
+    /// <summary>Maximum number of action jobs allowed to run at once. Excess jobs queue as pending. Default 4.</summary>
+    public int MaxConcurrentJobs { get; set; } = 4;
+
+    /// <summary>
+    /// Default per-job timeout in seconds. When &gt; 0, a job that exceeds this is
+    /// cancelled (process tree killed) and marked failed. 0 means no timeout. Default 0.
+    /// </summary>
+    public int DefaultTimeoutSeconds { get; set; }
+
+    /// <summary>Maximum number of streamed output lines retained on a job (rolling tail). Default 200.</summary>
+    public int OutputTailLines { get; set; } = 200;
 }
 
 /// <summary>

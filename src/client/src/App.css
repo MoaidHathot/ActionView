@@ -3420,3 +3420,76 @@ html[data-theme="light"] .json-bool, html[data-theme="light"] .json-null { color
   background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 6px 8px; margin: 0; max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-word;
 }
+.activity-dur { color: var(--text-muted); font-variant-numeric: tabular-nums; font-size: 11px; }
+
+/* --- Editable content blocks --- */
+.editable-block { position: relative; }
+.editable-toolbar {
+  position: absolute; top: -6px; right: -4px; display: flex; gap: 4px; align-items: center;
+  opacity: 0; transition: opacity 0.12s; z-index: 2;
+}
+.editable-block:hover .editable-toolbar { opacity: 1; }
+.editable-tool {
+  display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+  padding: 0; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-surface); color: var(--text-muted); cursor: pointer;
+}
+.editable-tool:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+.edited-pill {
+  font-size: 10px; font-weight: 600; color: var(--warning); background: var(--warning-bg);
+  border-radius: 999px; padding: 1px 7px;
+}
+.editable-editing { display: flex; flex-direction: column; gap: 8px; }
+.editable-textarea {
+  width: 100%; box-sizing: border-box; font-family: var(--font-mono); font-size: 13px;
+  color: var(--text-heading); background: var(--bg); border: 1px solid var(--accent);
+  border-radius: var(--radius); padding: 8px; resize: vertical; min-height: 120px;
+}
+.editable-actions { display: flex; gap: 8px; }
+.editable-error { font-size: 12px; color: var(--danger); }
+.editable-diff {
+  margin-top: 8px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+}
+.editable-diff-head {
+  font-size: 11px; font-weight: 600; color: var(--text-muted); padding: 4px 8px;
+  border-bottom: 1px solid var(--border); background: var(--bg-surface);
+}
+.diff-line {
+  margin: 0; padding: 1px 8px; font-family: var(--font-mono); font-size: 12px;
+  white-space: pre-wrap; word-break: break-word;
+}
+.diff-added { background: var(--success-bg); color: var(--success); }
+.diff-removed { background: var(--danger-bg); color: var(--danger); text-decoration: line-through; }
+.diff-ctx { color: var(--text); }
+
+/* --- Entry-level "edited" badge --- */
+.entry-edited-badge {
+  display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600;
+  color: var(--warning); background: var(--warning-bg); border: none; border-radius: 999px;
+  padding: 2px 8px; cursor: pointer;
+}
+
+/* --- Long-running action jobs --- */
+.action-running {
+  display: flex; flex-direction: column; gap: 6px;
+  border: 1px solid var(--accent); border-radius: var(--radius);
+  background: var(--accent-bg); padding: 6px 8px; min-width: 220px;
+}
+.action-running-head { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.action-running-label { font-weight: 600; color: var(--text-heading); }
+.action-running-status { color: var(--accent); text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; }
+.action-running-timer { margin-left: auto; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.action-cancel-btn {
+  display: inline-flex; align-items: center; gap: 3px; font-size: 11px;
+  color: var(--danger); background: transparent; border: 1px solid var(--danger);
+  border-radius: var(--radius); padding: 1px 7px; cursor: pointer;
+}
+.action-cancel-btn:hover { background: var(--danger-bg); }
+.action-running-output {
+  font-family: var(--font-mono); font-size: 11px; color: var(--text);
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 4px 8px; margin: 0; max-height: 96px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+}
+.action-btn-error { color: var(--danger); }
+.spin { animation: av-spin 1s linear infinite; }
+@keyframes av-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

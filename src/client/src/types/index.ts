@@ -115,6 +115,8 @@ export interface ChartSeries {
 export interface ContentBlock {
   type: ContentBlockType | string;
   id?: string;
+  editable?: boolean;
+  edited?: BlockEdit;
   label?: string;
   body?: unknown;
 
@@ -241,6 +243,38 @@ export interface EntryOutcome {
   resultMessage?: string;
 }
 
+/** Edit provenance for a content block (original text + when/how often edited). */
+export interface BlockEdit {
+  originalText: string;
+  firstEditedAt: string;
+  lastEditedAt: string;
+  count: number;
+}
+
+export type ActionJobStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+/** A background execution of an action command (mirrors the C# ActionJob). */
+export interface ActionJob {
+  id: string;
+  entryId: string;
+  entryTitle?: string;
+  actionLabel: string;
+  actionStyle: ActionStyle;
+  target: 'entry' | 'section';
+  path?: number[];
+  targetId?: string;
+  command?: ActionCommandInfo;
+  trigger: string;
+  status: ActionJobStatus;
+  startedAt: string;
+  finishedAt?: string;
+  durationMs?: number;
+  exitCode?: number;
+  message?: string;
+  outputTail: string[];
+  postBehavior: PostActionBehavior;
+}
+
 export interface DashboardStats {
   totalPending: number;
   totalViewed: number;
@@ -276,10 +310,13 @@ export interface ActionEvent {
   entryTitle?: string;
   actionLabel: string;
   actionStyle: ActionStyle;
-  target: 'entry' | 'section' | 'system';
+  target: 'entry' | 'section' | 'system' | 'content';
   path?: number[];
   targetId?: string;
   trigger: string;
+  status?: string;
+  durationMs?: number;
+  jobId?: string;
   command?: ActionCommandInfo;
   success: boolean;
   statusCode?: number;

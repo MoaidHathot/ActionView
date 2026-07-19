@@ -40,6 +40,7 @@ function ActivityRow({ ev }: { ev: ActionEvent }) {
         </span>
         <span className={`activity-label action-${ev.actionStyle}`}>{ev.actionLabel}</span>
         <span className="activity-target">{targetText(ev)}</span>
+        {ev.durationMs != null && <span className="activity-dur">{formatDuration(ev.durationMs)}</span>}
         <span className="activity-time">{formatWhen(ev.timestamp)}</span>
         {hasDetail && (
           <button
@@ -70,10 +71,19 @@ function ActivityRow({ ev }: { ev: ActionEvent }) {
 
 function targetText(ev: ActionEvent): string {
   const trig = ev.trigger && ev.trigger !== 'click' ? ` · ${ev.trigger}` : '';
+  if (ev.target === 'content') return `content edit${trig}`;
   if (ev.target === 'section') return `comment/section${trig}`;
   if (ev.target === 'system') return `entry${trig}`;
   const post = ev.postBehavior ? ` → ${ev.postBehavior}` : '';
   return `entry action${post}${trig}`;
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m ${Math.round(s % 60)}s`;
 }
 
 function formatWhen(iso: string): string {

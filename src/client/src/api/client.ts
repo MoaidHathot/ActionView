@@ -1,7 +1,7 @@
 import type {
-  Entry, ActionExecutionResult, DashboardStats, EntryUpdateRequest,
+  Entry, DashboardStats, EntryUpdateRequest,
   BatchResult, EntryTemplate, EntryFilters, SavedView, SortOption, ClientConfig, ViewCounts,
-  ActionEvent,
+  ActionEvent, ActionJob,
 } from '../types';
 
 const API_BASE = '/api';
@@ -55,7 +55,7 @@ export const api = {
     }),
 
   executeAction: (entryId: string, actionIndex: number, parameters?: Record<string, string>) =>
-    fetchJson<ActionExecutionResult>(`${API_BASE}/entries/${entryId}/actions/${actionIndex}`, {
+    fetchJson<ActionJob>(`${API_BASE}/entries/${entryId}/actions/${actionIndex}`, {
       method: 'POST',
       body: parameters ? JSON.stringify({ parameters }) : undefined,
     }),
@@ -66,13 +66,34 @@ export const api = {
     actionIndex: number,
     parameters?: Record<string, string>,
   ) =>
-    fetchJson<ActionExecutionResult>(
+    fetchJson<ActionJob>(
       `${API_BASE}/entries/${entryId}/blocks/${blockPath.join('.')}/actions/${actionIndex}`,
       {
         method: 'POST',
         body: parameters ? JSON.stringify({ parameters }) : undefined,
       },
     ),
+
+  // Persisted inline edit of a block's text (captures the original on first edit).
+  updateBlock: (entryId: string, blockPath: number[], value: string) =>
+    fetchJson<Entry>(`${API_BASE}/entries/${entryId}/blocks/${blockPath.join('.')}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ value }),
+    }),
+
+  // Revert a block's text back to the captured original.
+  revertBlock: (entryId: string, blockPath: number[]) =>
+    fetchJson<Entry>(`${API_BASE}/entries/${entryId}/blocks/${blockPath.join('.')}/revert`, {
+      method: 'POST',
+    }),
+
+  // --- Action jobs (background execution) ---
+
+  getJob: (jobId: string) =>
+    fetchJson<ActionJob>(`${API_BASE}/jobs/${jobId}`),
+
+  cancelJob: (jobId: string) =>
+    fetchJson<{ cancelled: boolean }>(`${API_BASE}/jobs/${jobId}/cancel`, { method: 'POST' }),
 
   // Per-entry action history (audit log). Survives archive/dismiss/delete.
   getEntryHistory: (entryId: string, limit?: number) =>

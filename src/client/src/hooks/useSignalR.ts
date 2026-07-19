@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as signalR from '@microsoft/signalr';
-import type { Entry } from '../types';
+import type { Entry, ActionJob } from '../types';
 
 interface SignalRCallbacks {
   onEntriesAdded?: (entries: Entry[]) => void;
@@ -8,6 +8,9 @@ interface SignalRCallbacks {
   onEntryArchived?: (entry: Entry) => void;
   onEntryDeleted?: (entryId: string) => void;
   onConfigChanged?: () => void;
+  onActionJobStarted?: (job: ActionJob) => void;
+  onActionJobProgress?: (jobId: string, line: string) => void;
+  onActionJobFinished?: (job: ActionJob) => void;
   onReconnected?: () => void;
 }
 
@@ -57,6 +60,18 @@ export function useSignalR(callbacks: SignalRCallbacks) {
 
     connection.on('ConfigChanged', () => {
       callbacksRef.current.onConfigChanged?.();
+    });
+
+    connection.on('ActionJobStarted', (job: ActionJob) => {
+      callbacksRef.current.onActionJobStarted?.(job);
+    });
+
+    connection.on('ActionJobProgress', (jobId: string, line: string) => {
+      callbacksRef.current.onActionJobProgress?.(jobId, line);
+    });
+
+    connection.on('ActionJobFinished', (job: ActionJob) => {
+      callbacksRef.current.onActionJobFinished?.(job);
     });
 
     connection.onreconnected(() => {

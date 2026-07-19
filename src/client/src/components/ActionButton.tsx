@@ -1,30 +1,28 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Info, Check, AlertTriangle } from 'lucide-react';
-import type { ActionParameter, EntryAction } from '../types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Info, Check, AlertTriangle, Loader2, Square } from 'lucide-react';
+import type { ActionParameter, EntryAction, ActionJob } from '../types';
 import { ActionParameterForm } from './ActionParameterForm';
 import { commandPreview, commandKind } from '../utils/commandPreview';
 import type { OutcomeMarker } from '../utils/markers';
+import { useActionJob, useActionJobs } from '../context/ActionJobsProvider';
 
 interface Props {
   action: EntryAction;
   /**
-   * Called when the user submits. Receives the validated parameter values, or
-   * undefined when the action declares no parameters.
+   * Called when the user submits. Receives validated parameter values (or
+   * undefined). Returns the started ActionJob so the button can track progress.
    */
-  onClick: (parameters?: Record<string, string>) => Promise<void> | void;
+  onClick: (parameters?: Record<string, string>) => Promise<ActionJob | void> | ActionJob | void;
   loading?: boolean;
-  /**
-   * Stable identity for localStorage draft persistence (so an unrelated re-render
-   * caused by a SignalR update doesn't wipe a half-typed PR comment). Typically:
-   *   `${entryId}.${actionIndex}` for entry actions
-   *   `${entryId}.b${blockPath}.${actionIndex}` for section actions
-   */
+  /** Stable identity for localStorage draft persistence. */
   draftKey?: string;
   /** Last recorded outcome for this action (drives the ✓/✕ result chip). */
   marker?: OutcomeMarker;
   /** When set, the button is inert and shows the reason on hover (e.g. no handler wired). */
   disabled?: boolean;
   disabledReason?: string;
+  /** Expands {{content.*}}/{{entry.*}} references in the parameter defaults for display. */
+  expandDefault?: (text: string) => string;
 }
 
 interface DraftStorage {
@@ -56,11 +54,14 @@ function makeDraftStorage(key: string | undefined): DraftStorage {
   };
 }
 
-/** Build the initial values dict from declared defaults. */
-function defaultsFor(parameters: ActionParameter[] | undefined): Record<string, string> {
+/** Build the initial values dict from declared defaults (expanding content refs for display). */
+function defaultsFor(parameters: ActionParameter[] | undefined, expand?: (t: string) => string): Record<string, string> {
   if (!parameters) return {};
   const out: Record<string, string> = {};
-  for (const p of parameters) out[p.name] = p.default ?? (p.type === 'boolean' ? 'false' : '');
+  for (const p of parameters) {
+    const raw = p.default ?? (p.type === 'boolean' ? 'false' : '');
+    out[p.name] = expand && raw ? expand(raw) : raw;
+  }
   return out;
 }
 
@@ -84,26 +85,46 @@ function validate(parameters: ActionParameter[] | undefined, values: Record<stri
   return errors;
 }
 
-export function ActionButton({ action, onClick, loading, draftKey, marker, disabled, disabledReason }: Props) {
+export function ActionButton({ action, onClick, loading, draftKey, marker, disabled, disabledReason, expandDefault }: Props) {
   const hasParameters = (action.parameters?.length ?? 0) > 0;
   const storage = useMemo(() => makeDraftStorage(draftKey), [draftKey]);
 
   const [open, setOpen] = useState(false);            // parameter form expanded
   const [confirming, setConfirming] = useState(false); // simple confirm prompt (no params)
-  const [isLoading, setIsLoading] = useState(false);
   const [showCmd, setShowCmd] = useState(false);       // command preview disclosure
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | undefined>(undefined);
   const [values, setValues] = useState<Record<string, string>>(() => ({
-    ...defaultsFor(action.parameters),
+    ...defaultsFor(action.parameters, expandDefault),
     ...(storage.load() ?? {}),
   }));
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Persist drafts as the user types so a SignalR refresh / unrelated re-render
-  // can't wipe a long edit.
+  const { cancel } = useActionJobs();
+  const job = useActionJob(jobId);
+  const running = !!job && (job.status === 'pending' || job.status === 'running');
+
+  // Persist drafts as the user types.
   useEffect(() => {
     if (open && hasParameters) storage.save(values);
   }, [open, hasParameters, values, storage]);
+
+  // React once to a job reaching a terminal state.
+  const prevStatus = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!job) return;
+    if (job.status === prevStatus.current) return;
+    prevStatus.current = job.status;
+    if (job.status === 'succeeded') {
+      if (hasParameters) storage.clear();
+      setOpen(false);
+      setConfirming(false);
+      setSubmitError(null);
+      setValues({ ...defaultsFor(action.parameters, expandDefault) });
+    } else if (job.status === 'failed' || job.status === 'cancelled') {
+      setSubmitError(job.message ?? job.status);
+    }
+  }, [job, hasParameters, storage, action.parameters, expandDefault]);
 
   const styleClass = `action-btn action-${action.style}`;
 
@@ -118,25 +139,25 @@ export function ActionButton({ action, onClick, loading, draftKey, marker, disab
   }, []);
 
   const submit = useCallback(async (parameters?: Record<string, string>) => {
-    setIsLoading(true);
     setSubmitError(null);
+    prevStatus.current = undefined;
     try {
-      await onClick(parameters);
-      // On success, clear draft and collapse.
-      if (hasParameters) storage.clear();
-      setOpen(false);
-      setConfirming(false);
-      setValues({ ...defaultsFor(action.parameters) });
+      const started = await onClick(parameters);
+      if (started && typeof started === 'object' && 'id' in started) {
+        setJobId(started.id);
+      } else {
+        // No job returned (e.g. a non-job handler): treat as immediately done.
+        if (hasParameters) storage.clear();
+        setOpen(false);
+        setConfirming(false);
+      }
     } catch (err) {
       setSubmitError(String(err));
-    } finally {
-      setIsLoading(false);
     }
-  }, [onClick, hasParameters, storage, action.parameters]);
+  }, [onClick, hasParameters, storage]);
 
   const handlePrimaryClick = useCallback(() => {
     if (hasParameters) {
-      // First click: expand the form. (Defaults are already loaded.)
       if (!open) setOpen(true);
       return;
     }
@@ -164,6 +185,11 @@ export function ActionButton({ action, onClick, loading, draftKey, marker, disab
     setSubmitError(null);
   }, []);
 
+  // --- Running (job in flight): show progress + cancel, replaces the button ---
+  if (running && job) {
+    return <RunningAction job={job} onCancel={() => cancel(job.id)} />;
+  }
+
   // --- Parameter form mode ---
   if (open && hasParameters) {
     return (
@@ -179,22 +205,13 @@ export function ActionButton({ action, onClick, loading, draftKey, marker, disab
           values={values}
           onChange={handleParamChange}
           errors={errors}
-          disabled={isLoading}
         />
         {submitError && <div className="action-param-error">{submitError}</div>}
         <div className="action-param-actions">
-          <button
-            className={styleClass}
-            onClick={handleFormSubmit}
-            disabled={isLoading || loading}
-          >
-            {isLoading ? 'Executing...' : action.label}
+          <button className={styleClass} onClick={handleFormSubmit}>
+            {action.label}
           </button>
-          <button
-            className="action-btn action-default"
-            onClick={handleCancel}
-            disabled={isLoading}
-          >
+          <button className="action-btn action-default" onClick={handleCancel}>
             Cancel
           </button>
         </div>
@@ -207,8 +224,8 @@ export function ActionButton({ action, onClick, loading, draftKey, marker, disab
     return (
       <div className="action-confirm">
         <span className="confirm-message">{action.confirmMessage}</span>
-        <button className="action-btn action-danger" onClick={handlePrimaryClick} disabled={isLoading}>
-          {isLoading ? 'Executing...' : 'Confirm'}
+        <button className="action-btn action-danger" onClick={handlePrimaryClick}>
+          Confirm
         </button>
         <button className="action-btn action-default" onClick={handleCancel}>
           Cancel
@@ -227,12 +244,8 @@ export function ActionButton({ action, onClick, loading, draftKey, marker, disab
             {action.label}
           </button>
         ) : (
-          <button
-            className={styleClass}
-            onClick={handlePrimaryClick}
-            disabled={isLoading || loading}
-          >
-            {isLoading ? 'Executing...' : action.label}
+          <button className={styleClass} onClick={handlePrimaryClick} disabled={loading}>
+            {action.label}
           </button>
         )}
         {preview && (
@@ -263,6 +276,7 @@ export function ActionButton({ action, onClick, loading, draftKey, marker, disab
           <code>{preview}</code>
         </div>
       )}
+      {submitError && <div className="action-btn-hint action-btn-error">{submitError}</div>}
       {disabled && disabledReason && (
         <div className="action-btn-hint">{disabledReason}</div>
       )}
@@ -270,7 +284,41 @@ export function ActionButton({ action, onClick, loading, draftKey, marker, disab
   );
 }
 
-/** Compact absolute-ish time for chips/tooltips (local time, HH:MM). */
+/** Live running state for an in-flight action job: spinner, elapsed timer, output tail, cancel. */
+function RunningAction({ job, onCancel }: { job: ActionJob; onCancel: () => void }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+  const elapsed = Math.max(0, Math.floor((now - new Date(job.startedAt).getTime()) / 1000));
+  const tail = job.outputTail?.slice(-3) ?? [];
+  return (
+    <div className="action-running">
+      <div className="action-running-head">
+        <Loader2 size={14} className="spin" />
+        <span className="action-running-label">{job.actionLabel}</span>
+        <span className="action-running-status">{job.status === 'pending' ? 'queued' : 'running'}</span>
+        <span className="action-running-timer">{formatElapsed(elapsed)}</span>
+        <button className="action-cancel-btn" onClick={onCancel} title="Cancel">
+          <Square size={12} /> Cancel
+        </button>
+      </div>
+      {tail.length > 0 && (
+        <pre className="action-running-output">{tail.join('\n')}</pre>
+      )}
+    </div>
+  );
+}
+
+function formatElapsed(sec: number): string {
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}m ${s.toString().padStart(2, '0')}s`;
+}
+
+/** Compact absolute-ish time for chips/tooltips (local time). */
 function formatWhen(iso: string): string {
   try {
     const d = new Date(iso);

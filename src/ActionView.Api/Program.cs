@@ -55,6 +55,8 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddSingleton(config);
 builder.Services.AddSingleton<SecretResolver>();
 builder.Services.AddSingleton<ParameterResolver>();
+builder.Services.AddSingleton<ContentReferenceResolver>();
+builder.Services.AddSingleton(config.Actions);
 builder.Services.AddSingleton<FileAccessResolver>();
 builder.Services.AddSingleton(sp =>
     new TemplateRegistry(config.DataDirectory, sp.GetRequiredService<ILogger<TemplateRegistry>>()));
@@ -69,6 +71,7 @@ builder.Services.AddSingleton(sp =>
     new InboxWatcher(config.DataDirectory, sp.GetRequiredService<EntryStore>(), sp.GetRequiredService<ILogger<InboxWatcher>>()));
 builder.Services.AddSingleton<ActionExecutor>();
 builder.Services.AddHttpClient<ActionExecutor>();
+builder.Services.AddSingleton<ActionJobRunner>();
 builder.Services.AddSingleton<ToastNotifier>();
 builder.Services.AddSingleton<ViewStore>();
 builder.Services.AddSingleton<ConfigWatcher>();
@@ -169,6 +172,63 @@ entryStore.EntriesExternallyAdded += entries =>
     _ = hubContext.Clients.All.EntriesAdded(entries);
 };
 
+// Wire background action jobs → SignalR (live progress) + audit log (history) +
+// post-action behavior on success. The runner itself stays free of these deps.
+var jobRunner = app.Services.GetRequiredService<ActionJobRunner>();
+var actionAudit = app.Services.GetRequiredService<ActionAuditLog>();
+
+jobRunner.JobStarted += job => _ = hubContext.Clients.All.ActionJobStarted(job);
+jobRunner.JobProgress += (job, line) => _ = hubContext.Clients.All.ActionJobProgress(job.Id, line);
+jobRunner.JobFinished += job =>
+{
+    _ = hubContext.Clients.All.ActionJobFinished(job);
+
+    actionAudit.Append(new ActionEvent
+    {
+        EntryId = job.EntryId,
+        EntryTitle = job.EntryTitle,
+        ActionLabel = job.ActionLabel,
+        ActionStyle = job.ActionStyle,
+        Target = job.Target,
+        Path = job.Path,
+        TargetId = job.TargetId,
+        Trigger = job.Trigger,
+        Command = job.Command,
+        JobId = job.Id,
+        Status = job.Status.ToString().ToLowerInvariant(),
+        Success = job.Status == ActionJobStatus.Succeeded,
+        StatusCode = job.ExitCode,
+        Message = job.Message,
+        DurationMs = job.DurationMs,
+        Output = job.OutputTail.Count > 0 ? string.Join("\n", job.OutputTail) : null,
+        PostBehavior = job.Target == "entry" ? job.PostBehavior : null,
+    });
+
+    // Apply post-action behavior for successful entry-level actions.
+    if (job.Status == ActionJobStatus.Succeeded && job.Target == "entry")
+    {
+        switch (job.PostBehavior)
+        {
+            case PostActionBehavior.Archive:
+                var archived = entryStore.ArchiveEntry(job.EntryId, new EntryOutcome
+                {
+                    Action = job.ActionLabel,
+                    Success = true,
+                    ResultMessage = job.Message,
+                });
+                if (archived is not null)
+                    _ = hubContext.Clients.All.EntryArchived(archived);
+                break;
+            case PostActionBehavior.Delete:
+                entryStore.DeleteEntry(job.EntryId);
+                _ = hubContext.Clients.All.EntryDeleted(job.EntryId);
+                break;
+            case PostActionBehavior.Keep:
+                break;
+        }
+    }
+};
+
 templateRegistry.StartWatching();
 
 // Scan external templates directory if configured (after StartWatching so the
@@ -202,6 +262,7 @@ app.Lifetime.ApplicationStopping.Register(() =>
     templateRegistry.Dispose();
     entryStore.Dispose();
     configWatcher?.Dispose();
+    jobRunner.Dispose();
 });
 
 app.Run(listenUrl);

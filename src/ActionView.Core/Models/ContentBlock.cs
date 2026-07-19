@@ -21,11 +21,27 @@ public sealed class ContentBlock
     /// <summary>
     /// Optional stable identifier for this block. When set, it is used as the
     /// target key for action outcome markers (so a marker survives block
-    /// reordering); otherwise the block's positional path is used. Producers
-    /// that want durable per-target state (e.g. a PR comment's draft id) should
-    /// set this.
+    /// reordering) and for <c>{{content.ID}}</c> command references; otherwise
+    /// the block's positional path is used. Producers that want durable
+    /// per-target state (e.g. a PR comment's draft id) should set this.
     /// </summary>
     public string? Id { get; set; }
+
+    /// <summary>
+    /// When true, the dashboard shows an inline edit affordance for this block's
+    /// text. Edits persist to the entry (the block's <see cref="Body"/>) and can
+    /// be referenced from action commands via <c>{{content.self}}</c> /
+    /// <c>{{content.ID}}</c>, so an edited comment flows into the action that
+    /// uses it. Opt-in; defaults to not editable.
+    /// </summary>
+    public bool? Editable { get; set; }
+
+    /// <summary>
+    /// Edit provenance, set the first time the block's text is edited from the
+    /// dashboard. Preserves the original text (for the "view original" diff and
+    /// revert) while <see cref="Body"/> holds the current text. Null until edited.
+    /// </summary>
+    public BlockEdit? Edited { get; set; }
 
     /// <summary>Optional label/heading for the block.</summary>
     public string? Label { get; set; }
@@ -240,6 +256,23 @@ public sealed class ContentBlock
 
     /// <summary>New filename for diff blocks (right side).</summary>
     public string? NewFilename { get; set; }
+
+    /// <summary>
+    /// The block's primary editable text, used by inline editing and by
+    /// <c>{{content.*}}</c> command references. Prefers a string <see cref="Body"/>,
+    /// then <see cref="Value"/>, then <see cref="Title"/>/<see cref="Label"/>.
+    /// </summary>
+    public string GetText()
+    {
+        if (Body is { } body)
+        {
+            if (body.ValueKind == JsonValueKind.String)
+                return body.GetString() ?? string.Empty;
+            if (body.ValueKind is JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False)
+                return body.GetRawText();
+        }
+        return Value ?? Title ?? Label ?? string.Empty;
+    }
 }
 
 /// <summary>One entry in a link block's links[] array.</summary>

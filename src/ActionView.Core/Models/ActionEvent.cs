@@ -46,8 +46,17 @@ public sealed class ActionEvent
     /// </summary>
     public string? TargetId { get; set; }
 
-    /// <summary>How the execution was triggered: click | batch | undo | dismiss | delete.</summary>
+    /// <summary>How the execution was triggered: click | batch | undo | dismiss | delete | edit.</summary>
     public string Trigger { get; set; } = "click";
+
+    /// <summary>Lifecycle status for job-based executions: started | succeeded | failed | cancelled. Null for instantaneous events.</summary>
+    public string? Status { get; set; }
+
+    /// <summary>Wall-clock duration of the execution in milliseconds, when known.</summary>
+    public long? DurationMs { get; set; }
+
+    /// <summary>The background job this event belongs to, when the action ran as a job.</summary>
+    public string? JobId { get; set; }
 
     /// <summary>Redacted summary of the command that ran (never includes headers, body, or resolved secrets).</summary>
     public ActionCommandInfo? Command { get; set; }

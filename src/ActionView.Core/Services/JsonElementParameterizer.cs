@@ -14,20 +14,20 @@ namespace ActionView.Core.Services;
 public static class JsonElementParameterizer
 {
     /// <summary>
-    /// Returns the raw JSON for <paramref name="element"/> with parameter placeholders substituted
-    /// inside any string-valued leaves. Non-string leaves (numbers, booleans, null) are emitted as-is.
+    /// Returns the raw JSON for <paramref name="element"/> with each string leaf
+    /// transformed by <paramref name="resolveLeaf"/> (typically parameter +
+    /// content-reference substitution). Non-string leaves are emitted as-is.
+    /// Because substitution happens at the leaf level, values containing JSON
+    /// special characters cannot break the resulting JSON — System.Text.Json
+    /// escapes them on serialization.
     /// </summary>
-    public static string Parameterize(JsonElement element, ParameterResolver resolver, IReadOnlyDictionary<string, string>? parameters)
+    public static string Parameterize(JsonElement element, Func<string, string> resolveLeaf)
     {
-        // Fast path: nothing to substitute.
-        if (parameters is null || parameters.Count == 0)
-            return element.GetRawText();
-
-        var node = ConvertAndSubstitute(element, resolver, parameters);
+        var node = ConvertAndSubstitute(element, resolveLeaf);
         return node?.ToJsonString() ?? "null";
     }
 
-    private static JsonNode? ConvertAndSubstitute(JsonElement element, ParameterResolver resolver, IReadOnlyDictionary<string, string> parameters)
+    private static JsonNode? ConvertAndSubstitute(JsonElement element, Func<string, string> resolveLeaf)
     {
         switch (element.ValueKind)
         {
@@ -35,20 +35,20 @@ public static class JsonElementParameterizer
                 {
                     var obj = new JsonObject();
                     foreach (var prop in element.EnumerateObject())
-                        obj[prop.Name] = ConvertAndSubstitute(prop.Value, resolver, parameters);
+                        obj[prop.Name] = ConvertAndSubstitute(prop.Value, resolveLeaf);
                     return obj;
                 }
             case JsonValueKind.Array:
                 {
                     var arr = new JsonArray();
                     foreach (var item in element.EnumerateArray())
-                        arr.Add(ConvertAndSubstitute(item, resolver, parameters));
+                        arr.Add(ConvertAndSubstitute(item, resolveLeaf));
                     return arr;
                 }
             case JsonValueKind.String:
                 {
                     var raw = element.GetString() ?? string.Empty;
-                    return JsonValue.Create(resolver.Resolve(raw, parameters));
+                    return JsonValue.Create(resolveLeaf(raw));
                 }
             case JsonValueKind.Number:
                 // Preserve numeric precision by round-tripping through the raw text.

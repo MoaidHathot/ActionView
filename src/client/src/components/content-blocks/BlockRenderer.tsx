@@ -1,4 +1,4 @@
-import type { ContentBlock } from '../../types';
+import type { ContentBlock, Entry, ActionJob } from '../../types';
 import type { DerivedMarkers } from '../../utils/markers';
 import { MarkdownBlock } from './MarkdownBlock';
 import { CodeBlock } from './CodeBlock';
@@ -20,8 +20,9 @@ import { ChartBlock } from './ChartBlock';
 import { DiagramBlock } from './DiagramBlock';
 import { BeforeAfterBlock } from './BeforeAfterBlock';
 import { PluginBlockWrapper } from './PluginBlockWrapper';
+import { EditableBlock } from '../EditableBlock';
 
-interface BlockRendererProps {
+export interface BlockRendererProps {
   block: ContentBlock;
   entryId: string;
   /** Positional path to this block (indices into content/children at each level). */
@@ -29,12 +30,33 @@ interface BlockRendererProps {
   /** Stable key for blocks that persist UI state in localStorage (alert dismiss, etc). */
   blockKey?: string;
   /** Executes an action owned by a nested block, addressed by its full path. */
-  onBlockAction?: (path: number[], actionIndex: number, parameters?: Record<string, string>) => void;
+  onBlockAction?: (path: number[], actionIndex: number, parameters?: Record<string, string>) => Promise<ActionJob | void> | ActionJob | void;
   /** Derived outcome markers so nested sections can show their last result. */
   markers?: DerivedMarkers;
+  /** Called with the updated entry after a block is edited/reverted inline. */
+  onEntryChanged?: (entry: Entry) => void;
+  /** Expands {{content.*}}/{{entry.*}} in action parameter defaults for display. */
+  expandRef?: (text: string, self?: ContentBlock) => string;
 }
 
-export function BlockRenderer({ block, entryId, path = [], blockKey, onBlockAction, markers }: BlockRendererProps) {
+export function BlockRenderer(props: BlockRendererProps) {
+  const inner = <BlockInner {...props} />;
+  if (props.block.editable) {
+    return (
+      <EditableBlock
+        block={props.block}
+        entryId={props.entryId}
+        path={props.path ?? []}
+        onEntryChanged={props.onEntryChanged}
+      >
+        {inner}
+      </EditableBlock>
+    );
+  }
+  return inner;
+}
+
+function BlockInner({ block, entryId, path = [], blockKey, onBlockAction, markers, onEntryChanged, expandRef }: BlockRendererProps) {
   switch (block.type) {
     case 'markdown':
       return <MarkdownBlock block={block} />;
@@ -56,6 +78,8 @@ export function BlockRenderer({ block, entryId, path = [], blockKey, onBlockActi
           path={path}
           onBlockAction={onBlockAction}
           markers={markers}
+          onEntryChanged={onEntryChanged}
+          expandRef={expandRef}
         />
       );
     case 'divider':

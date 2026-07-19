@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { ChevronRight, Check, AlertTriangle } from 'lucide-react';
-import type { ContentBlock } from '../../types';
+import type { ContentBlock, Entry, ActionJob } from '../../types';
 import type { DerivedMarkers } from '../../utils/markers';
 import { markerForSection } from '../../utils/markers';
 import { BlockRenderer } from './BlockRenderer';
@@ -13,9 +13,13 @@ interface Props {
   /** Positional path to THIS section (indices into content/children at each level). */
   path: number[];
   /** Executes an action owned by a block, addressed by its full path. */
-  onBlockAction?: (path: number[], actionIndex: number, parameters?: Record<string, string>) => void;
+  onBlockAction?: (path: number[], actionIndex: number, parameters?: Record<string, string>) => Promise<ActionJob | void> | ActionJob | void;
   /** Derived outcome markers so this section can show its last result. */
   markers?: DerivedMarkers;
+  /** Called with the updated entry after a nested block is edited/reverted inline. */
+  onEntryChanged?: (entry: Entry) => void;
+  /** Expands {{content.*}}/{{entry.*}} in parameter defaults for display. */
+  expandRef?: (text: string, self?: ContentBlock) => string;
 }
 
 /**
@@ -27,7 +31,7 @@ interface Props {
  * onBlockAction handler — are forwarded to nested BlockRenderers so nesting
  * works at any depth.
  */
-export function SectionBlock({ block, entryId, path, onBlockAction, markers }: Props) {
+export function SectionBlock({ block, entryId, path, onBlockAction, markers, onEntryChanged, expandRef }: Props) {
   const pathId = path.join('-');
   const storageKey = `actionview.section-collapsed.${entryId}.${pathId}`;
   const initial = (() => {
@@ -87,6 +91,8 @@ export function SectionBlock({ block, entryId, path, onBlockAction, markers }: P
                 path={[...path, i]}
                 onBlockAction={onBlockAction}
                 markers={markers}
+                onEntryChanged={onEntryChanged}
+                expandRef={expandRef}
               />
             </EntryErrorBoundary>
           ))}
@@ -100,6 +106,7 @@ export function SectionBlock({ block, entryId, path, onBlockAction, markers }: P
                   marker={marker && marker.label === action.label ? marker : undefined}
                   disabled={!canAct}
                   disabledReason={canAct ? undefined : 'This action can’t be run from here yet.'}
+                  expandDefault={expandRef ? (t) => expandRef(t, block) : undefined}
                   onClick={(parameters) => onBlockAction?.(path, actionIdx, parameters)}
                 />
               ))}

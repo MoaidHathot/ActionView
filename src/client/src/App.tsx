@@ -4,6 +4,7 @@ import type { Entry, DashboardStats, EntryFilters, SortOption, ClientConfig, Vie
 import type { UndoItem } from './components/UndoToast';
 import { api } from './api/client';
 import { useSignalR } from './hooks/useSignalR';
+import { useActionJobs } from './context/ActionJobsProvider';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import type { KeyboardShortcut } from './hooks/useKeyboardShortcuts';
 import { useTheme } from './hooks/useTheme';
@@ -38,6 +39,7 @@ export default function App() {
   const { views, createView, deleteView, replaceViews, reloadViews } = useViews();
   const { toasts, addToast, dismissToast } = useToasts();
   const { theme, toggle: toggleTheme } = useTheme();
+  const jobs = useActionJobs();
 
   // Batch selection state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -144,6 +146,13 @@ export default function App() {
       api.getConfig().then(setClientConfig).catch(() => {});
       api.getViewCounts().then(setViewCounts).catch(() => {});
     },
+    onActionJobStarted: (job) => jobs.upsert(job),
+    onActionJobProgress: (jobId, line) => jobs.progress(jobId, line),
+    onActionJobFinished: (job) => {
+      jobs.upsert(job);
+      // Keep the active feed's view counts fresh after keep-in-place actions.
+      api.getViewCounts().then(setViewCounts).catch(() => {});
+    },
     onReconnected: () => {
       loadEntries();
     },
@@ -205,11 +214,6 @@ export default function App() {
     setEntries((prev) => prev.filter((e) => e.id !== id));
     setSelectedEntry(null);
   }, []);
-
-  const handleActionExecuted = useCallback(() => {
-    loadEntries();
-    setSelectedEntry(null);
-  }, [loadEntries]);
 
   const handleEntryUpdated = useCallback((updated: Entry) => {
     setEntries((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
@@ -464,7 +468,6 @@ export default function App() {
                   entry={selectedEntry}
                   onDismiss={handleDismiss}
                   onDelete={handleDelete}
-                  onActionExecuted={handleActionExecuted}
                   onEntryUpdated={handleEntryUpdated}
                   onUndoCreated={handleUndoCreated}
                   defaultUndoWindow={DEFAULT_UNDO_WINDOW}

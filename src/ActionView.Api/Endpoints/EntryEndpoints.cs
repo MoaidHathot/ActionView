@@ -147,11 +147,13 @@ public static class EntryEndpoints
             return Results.Ok(entry);
         });
 
-        // --- Execute entry action ---
+        // --- Execute entry action (starts a background job) ---
+        // Returns 202 + the pending ActionJob immediately; progress/completion
+        // arrive over SignalR (ActionJobStarted/Progress/Finished). Post-action
+        // behavior (archive/delete) is applied on job success in Program.cs.
         group.MapPost("/{id}/actions/{actionIndex:int}",
-            async (string id, int actionIndex, ActionExecutionRequest? request,
-                   EntryStore store, ActionExecutor executor, ActionAuditLog audit,
-                   IHubContext<EntryHub, IEntryHubClient> hubContext) =>
+            (string id, int actionIndex, ActionExecutionRequest? request,
+             EntryStore store, ActionJobRunner jobs) =>
         {
             var entry = store.GetEntry(id);
             if (entry is null) return Results.NotFound(new { error = "Entry not found" });
@@ -165,48 +167,29 @@ public static class EntryEndpoints
             if (errors.Count > 0)
                 return Results.BadRequest(new { error = "Invalid parameters", details = errors });
 
-            var result = await executor.ExecuteAsync(action.Command, parameters);
-
-            var post = result.Success ? action.OnSuccess : (PostActionBehavior?)null;
-            audit.Append(BuildActionEvent(entry, action, "entry", path: null, targetId: null, trigger: "click", result, post));
-
-            if (result.Success)
+            var job = new ActionJob
             {
-                switch (action.OnSuccess)
-                {
-                    case PostActionBehavior.Archive:
-                        var archivedEntry = store.ArchiveEntry(id, new EntryOutcome
-                        {
-                            Action = action.Label,
-                            Success = true,
-                            ResultMessage = result.Message
-                        });
-                        if (archivedEntry is not null)
-                            await hubContext.Clients.All.EntryArchived(archivedEntry);
-                        break;
-
-                    case PostActionBehavior.Delete:
-                        store.DeleteEntry(id);
-                        await hubContext.Clients.All.EntryDeleted(id);
-                        break;
-
-                    case PostActionBehavior.Keep:
-                        break;
-                }
-            }
-
-            return Results.Ok(result);
+                EntryId = entry.Id,
+                EntryTitle = entry.Title,
+                ActionLabel = action.Label,
+                ActionStyle = action.Style,
+                Target = "entry",
+                Command = ActionCommandInfo.From(action.Command),
+                PostBehavior = action.OnSuccess,
+                Trigger = "click",
+            };
+            jobs.Start(job, action.Command, parameters, new ActionContext { Entry = entry });
+            return Results.Accepted($"/api/jobs/{job.Id}", job);
         });
 
-        // --- Execute a block/section action addressed by positional path ---
+        // --- Execute a block/section action addressed by positional path (job) ---
         // Path is a dot-delimited list of indices into the content/children tree
-        // (e.g. "3.0" = entry.Content[3].Children[0]). This replaces the old
-        // top-level-only sectionIndex scheme so actions on NESTED sections
-        // (e.g. per-comment Approve/Delete inside a "Review Comments" section)
-        // actually resolve and execute.
+        // (e.g. "3.0" = entry.Content[3].Children[0]). Section actions never move
+        // the entry (PostBehavior = Keep), preserving prior behavior. The owning
+        // block is exposed to the command as {{content.self}}.
         group.MapPost("/{entryId}/blocks/{path}/actions/{actionIndex:int}",
-            async (string entryId, string path, int actionIndex, ActionExecutionRequest? request,
-                   EntryStore store, ActionExecutor executor, ActionAuditLog audit) =>
+            (string entryId, string path, int actionIndex, ActionExecutionRequest? request,
+             EntryStore store, ActionJobRunner jobs) =>
         {
             var entry = store.GetEntry(entryId);
             if (entry is null) return Results.NotFound(new { error = "Entry not found" });
@@ -226,11 +209,108 @@ public static class EntryEndpoints
             if (errors.Count > 0)
                 return Results.BadRequest(new { error = "Invalid parameters", details = errors });
 
-            var result = await executor.ExecuteAsync(action.Command, parameters);
+            var job = new ActionJob
+            {
+                EntryId = entry.Id,
+                EntryTitle = entry.Title,
+                ActionLabel = action.Label,
+                ActionStyle = action.Style,
+                Target = "section",
+                Path = indices,
+                TargetId = block.Id,
+                Command = ActionCommandInfo.From(action.Command),
+                PostBehavior = PostActionBehavior.Keep,
+                Trigger = "click",
+            };
+            jobs.Start(job, action.Command, parameters, new ActionContext { Entry = entry, SelfBlock = block });
+            return Results.Accepted($"/api/jobs/{job.Id}", job);
+        });
 
-            audit.Append(BuildActionEvent(entry, action, "section", indices, block.Id, trigger: "click", result, post: null));
+        // --- Edit a block's text (persists to the entry; captures the original) ---
+        group.MapPatch("/{entryId}/blocks/{path}",
+            async (string entryId, string path, BlockEditRequest req, EntryStore store, ActionAuditLog audit,
+                   IHubContext<EntryHub, IEntryHubClient> hubContext) =>
+        {
+            var indices = BlockPath.Parse(path);
+            if (indices is null) return Results.BadRequest(new { error = "Invalid block path" });
 
-            return Results.Ok(result);
+            var check = store.GetEntry(entryId);
+            var target = check is null ? null : BlockPath.Resolve(check, indices);
+            if (check is null || target is null) return Results.NotFound(new { error = "Block not found" });
+
+            var newValue = req.Value ?? string.Empty;
+            string? original = null;
+            string? blockId = target.Id;
+
+            var entry = store.UpdateEntry(entryId, e =>
+            {
+                var block = BlockPath.Resolve(e, indices);
+                if (block is null) return;
+                var current = block.GetText();
+                if (block.Edited is null)
+                    block.Edited = new BlockEdit { OriginalText = current, FirstEditedAt = DateTimeOffset.UtcNow, LastEditedAt = DateTimeOffset.UtcNow, Count = 1 };
+                else { block.Edited.LastEditedAt = DateTimeOffset.UtcNow; block.Edited.Count++; }
+                original = block.Edited.OriginalText;
+                block.Body = JsonSerializer.SerializeToElement(newValue);
+            });
+            if (entry is null) return Results.NotFound();
+
+            audit.Append(new ActionEvent
+            {
+                EntryId = entryId,
+                EntryTitle = entry.Title,
+                ActionLabel = "Edited",
+                Target = "content",
+                Path = indices,
+                TargetId = blockId,
+                Trigger = "edit",
+                Success = true,
+                Message = "Block content edited",
+                Output = Truncate($"--- original ---\n{original}\n--- edited ---\n{newValue}"),
+            });
+
+            await hubContext.Clients.All.EntryUpdated(entry);
+            return Results.Ok(entry);
+        });
+
+        // --- Revert a block's text to the captured original ---
+        group.MapPost("/{entryId}/blocks/{path}/revert",
+            async (string entryId, string path, EntryStore store, ActionAuditLog audit,
+                   IHubContext<EntryHub, IEntryHubClient> hubContext) =>
+        {
+            var indices = BlockPath.Parse(path);
+            if (indices is null) return Results.BadRequest(new { error = "Invalid block path" });
+
+            var check = store.GetEntry(entryId);
+            var target = check is null ? null : BlockPath.Resolve(check, indices);
+            if (check is null || target is null) return Results.NotFound(new { error = "Block not found" });
+            if (target.Edited is null) return Results.BadRequest(new { error = "Block has no edit to revert" });
+
+            var blockId = target.Id;
+            var entry = store.UpdateEntry(entryId, e =>
+            {
+                var block = BlockPath.Resolve(e, indices);
+                if (block?.Edited is null) return;
+                block.Body = JsonSerializer.SerializeToElement(block.Edited.OriginalText);
+                block.Edited = null;
+            });
+            if (entry is null) return Results.NotFound();
+
+            audit.Append(new ActionEvent
+            {
+                EntryId = entryId,
+                EntryTitle = entry.Title,
+                ActionLabel = "Reverted",
+                Target = "content",
+                Path = indices,
+                TargetId = blockId,
+                Trigger = "edit",
+                Success = true,
+                Message = "Block content reverted to original",
+            });
+
+            await hubContext.Clients.All.EntryUpdated(entry);
+            return Results.Ok(entry);
         });
 
         // --- Per-entry action history (audit log) ---
@@ -238,6 +318,18 @@ public static class EntryEndpoints
         // never pruned when the entry moves or is removed.
         group.MapGet("/{id}/history", (string id, ActionAuditLog audit, int? limit) =>
             Results.Ok(audit.GetForEntry(id, limit ?? 200)));
+
+        // --- Action jobs (background execution status/cancel) ---
+        var jobsGroup = app.MapGroup("/api/jobs");
+        jobsGroup.MapGet("/", (ActionJobRunner jobs, string? entryId) => Results.Ok(jobs.Active(entryId)));
+        jobsGroup.MapGet("/{jobId}", (string jobId, ActionJobRunner jobs) =>
+        {
+            var job = jobs.Get(jobId);
+            return job is null ? Results.NotFound() : Results.Ok(job);
+        });
+        jobsGroup.MapPost("/{jobId}/cancel", (string jobId, ActionJobRunner jobs) =>
+            jobs.Cancel(jobId) ? Results.Ok(new { cancelled = true }) : Results.NotFound());
+
 
         // --- Pin/unpin entry ---
         group.MapPost("/{id}/pin",
@@ -277,7 +369,7 @@ public static class EntryEndpoints
                 if (errors.Count > 0)
                     return Results.BadRequest(new { error = "Invalid parameters", details = errors });
 
-                var undoResult = await executor.ExecuteAsync(undoCommand, parameters);
+                var undoResult = await executor.ExecuteAsync(undoCommand, parameters, new ActionContext { Entry = archivedEntry });
                 audit.Append(new ActionEvent
                 {
                     EntryId = id,
@@ -387,7 +479,7 @@ public static class EntryEndpoints
                 var (errors, parameters) = ActionParameterValidator.Validate(action.Parameters, request.Parameters);
                 if (errors.Count > 0) { failed++; continue; }
 
-                var result = await executor.ExecuteAsync(action.Command, parameters);
+                var result = await executor.ExecuteAsync(action.Command, parameters, new ActionContext { Entry = entry });
                 var post = result.Success ? action.OnSuccess : (PostActionBehavior?)null;
                 audit.Append(BuildActionEvent(entry, action, "entry", path: null, targetId: null, trigger: "batch", result, post));
 
@@ -490,6 +582,10 @@ public static class EntryEndpoints
 
     // --- Audit + block-path helpers ---
 
+    /// <summary>Truncates long audit payloads (before/after diffs, output) to keep the log compact.</summary>
+    private static string Truncate(string value, int max = 2000)
+        => value.Length > max ? value[..max] + "..." : value;
+
     private static ActionEvent BuildActionEvent(
         Entry entry, EntryAction action, string target, List<int>? path, string? targetId,
         string trigger, ActionExecutionResult result, PostActionBehavior? post) => new()
@@ -551,4 +647,10 @@ public sealed class BatchActionRequest
 public sealed class ActionExecutionRequest
 {
     public Dictionary<string, string>? Parameters { get; set; }
+}
+
+/// <summary>Body of a block-edit PATCH: the new text for the block.</summary>
+public sealed class BlockEditRequest
+{
+    public string? Value { get; set; }
 }

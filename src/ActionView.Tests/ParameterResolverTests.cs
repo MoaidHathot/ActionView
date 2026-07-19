@@ -68,7 +68,7 @@ public class JsonElementParameterizerTests
     {
         var element = Parse("{\"body\":\"{{param.text}}\",\"count\":3}");
         var result = JsonElementParameterizer.Parameterize(
-            element, Resolver, new Dictionary<string, string> { ["text"] = "hello" });
+            element, leaf => Resolver.Resolve(leaf, new Dictionary<string, string> { ["text"] = "hello" }));
 
         Assert.Equal("{\"body\":\"hello\",\"count\":3}", result);
     }
@@ -79,7 +79,7 @@ public class JsonElementParameterizerTests
         // User input containing quotes/newlines must not break the JSON payload.
         var element = Parse("{\"body\":\"{{param.text}}\"}");
         var result = JsonElementParameterizer.Parameterize(
-            element, Resolver, new Dictionary<string, string> { ["text"] = "she said \"hi\"\nand left" });
+            element, leaf => Resolver.Resolve(leaf, new Dictionary<string, string> { ["text"] = "she said \"hi\"\nand left" }));
 
         // Re-parse to confirm validity and round-trip the value.
         using var doc = JsonDocument.Parse(result);
@@ -91,7 +91,7 @@ public class JsonElementParameterizerTests
     {
         var element = Parse("{\"items\":[{\"v\":\"{{param.a}}\"},{\"v\":\"{{param.b}}\"}]}");
         var result = JsonElementParameterizer.Parameterize(
-            element, Resolver, new Dictionary<string, string> { ["a"] = "x", ["b"] = "y" });
+            element, leaf => Resolver.Resolve(leaf, new Dictionary<string, string> { ["a"] = "x", ["b"] = "y" }));
 
         using var doc = JsonDocument.Parse(result);
         var items = doc.RootElement.GetProperty("items");
@@ -104,7 +104,7 @@ public class JsonElementParameterizerTests
     {
         var element = Parse("{\"n\":42,\"b\":true,\"z\":null,\"s\":\"{{param.x}}\"}");
         var result = JsonElementParameterizer.Parameterize(
-            element, Resolver, new Dictionary<string, string> { ["x"] = "ok" });
+            element, leaf => Resolver.Resolve(leaf, new Dictionary<string, string> { ["x"] = "ok" }));
 
         using var doc = JsonDocument.Parse(result);
         Assert.Equal(42, doc.RootElement.GetProperty("n").GetInt32());
@@ -117,9 +117,9 @@ public class JsonElementParameterizerTests
     public void Parameterize_NullParameters_ReturnsRawTextUnchanged()
     {
         var element = Parse("{\"a\":\"{{param.x}}\"}");
-        var result = JsonElementParameterizer.Parameterize(element, Resolver, null);
+        var result = JsonElementParameterizer.Parameterize(element, leaf => Resolver.Resolve(leaf, null));
 
-        // Fast path: no walk, raw text returned verbatim.
+        // No parameters resolve, so the placeholder is preserved after the leaf walk.
         Assert.Equal("{\"a\":\"{{param.x}}\"}", result);
     }
 }
