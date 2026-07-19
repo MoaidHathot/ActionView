@@ -102,6 +102,7 @@ export function EntryList({
       <div
         key={entry.id}
         className={`entry-list-item ${isSelected ? 'selected' : ''} ${isChecked ? 'checked' : ''}`}
+        data-severity={entry.severity}
         onClick={() => {
           if (selectionMode) {
             onToggleSelect(entry.id);
