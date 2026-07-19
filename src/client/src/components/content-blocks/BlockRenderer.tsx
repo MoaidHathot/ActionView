@@ -1,4 +1,5 @@
 import type { ContentBlock } from '../../types';
+import type { DerivedMarkers } from '../../utils/markers';
 import { MarkdownBlock } from './MarkdownBlock';
 import { CodeBlock } from './CodeBlock';
 import { JsonBlock } from './JsonBlock';
@@ -23,13 +24,17 @@ import { PluginBlockWrapper } from './PluginBlockWrapper';
 interface BlockRendererProps {
   block: ContentBlock;
   entryId: string;
-  sectionIndex?: number;
+  /** Positional path to this block (indices into content/children at each level). */
+  path?: number[];
   /** Stable key for blocks that persist UI state in localStorage (alert dismiss, etc). */
   blockKey?: string;
-  onSectionAction?: (sectionIndex: number, actionIndex: number, parameters?: Record<string, string>) => void;
+  /** Executes an action owned by a nested block, addressed by its full path. */
+  onBlockAction?: (path: number[], actionIndex: number, parameters?: Record<string, string>) => void;
+  /** Derived outcome markers so nested sections can show their last result. */
+  markers?: DerivedMarkers;
 }
 
-export function BlockRenderer({ block, entryId, sectionIndex, blockKey, onSectionAction }: BlockRendererProps) {
+export function BlockRenderer({ block, entryId, path = [], blockKey, onBlockAction, markers }: BlockRendererProps) {
   switch (block.type) {
     case 'markdown':
       return <MarkdownBlock block={block} />;
@@ -48,8 +53,9 @@ export function BlockRenderer({ block, entryId, sectionIndex, blockKey, onSectio
         <SectionBlock
           block={block}
           entryId={entryId}
-          sectionIndex={sectionIndex ?? 0}
-          onAction={onSectionAction}
+          path={path}
+          onBlockAction={onBlockAction}
+          markers={markers}
         />
       );
     case 'divider':

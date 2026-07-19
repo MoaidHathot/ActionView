@@ -29,5 +29,9 @@ public static class HistoryEndpoints
             var entry = store.GetArchivedEntry(id);
             return entry is null ? Results.NotFound() : Results.Ok(entry);
         });
+
+        // Global action activity feed (newest first) across all entries.
+        group.MapGet("/actions", (ActionAuditLog audit, int? limit) =>
+            Results.Ok(audit.GetRecent(limit ?? 200)));
     }
 }

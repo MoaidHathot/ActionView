@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Info, Check, AlertTriangle } from 'lucide-react';
 import type { ActionParameter, EntryAction } from '../types';
 import { ActionParameterForm } from './ActionParameterForm';
+import { commandPreview, commandKind } from '../utils/commandPreview';
+import type { OutcomeMarker } from '../utils/markers';
 
 interface Props {
   action: EntryAction;
@@ -14,9 +17,14 @@ interface Props {
    * Stable identity for localStorage draft persistence (so an unrelated re-render
    * caused by a SignalR update doesn't wipe a half-typed PR comment). Typically:
    *   `${entryId}.${actionIndex}` for entry actions
-   *   `${entryId}.s${sectionIndex}.${actionIndex}` for section actions
+   *   `${entryId}.b${blockPath}.${actionIndex}` for section actions
    */
   draftKey?: string;
+  /** Last recorded outcome for this action (drives the ✓/✕ result chip). */
+  marker?: OutcomeMarker;
+  /** When set, the button is inert and shows the reason on hover (e.g. no handler wired). */
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 interface DraftStorage {
@@ -76,13 +84,14 @@ function validate(parameters: ActionParameter[] | undefined, values: Record<stri
   return errors;
 }
 
-export function ActionButton({ action, onClick, loading, draftKey }: Props) {
+export function ActionButton({ action, onClick, loading, draftKey, marker, disabled, disabledReason }: Props) {
   const hasParameters = (action.parameters?.length ?? 0) > 0;
   const storage = useMemo(() => makeDraftStorage(draftKey), [draftKey]);
 
   const [open, setOpen] = useState(false);            // parameter form expanded
   const [confirming, setConfirming] = useState(false); // simple confirm prompt (no params)
   const [isLoading, setIsLoading] = useState(false);
+  const [showCmd, setShowCmd] = useState(false);       // command preview disclosure
   const [values, setValues] = useState<Record<string, string>>(() => ({
     ...defaultsFor(action.parameters),
     ...(storage.load() ?? {}),
@@ -208,14 +217,65 @@ export function ActionButton({ action, onClick, loading, draftKey }: Props) {
     );
   }
 
-  // --- Default button ---
+  // --- Default button (with command preview + last-outcome chip) ---
+  const preview = commandPreview(action.command);
   return (
-    <button
-      className={styleClass}
-      onClick={handlePrimaryClick}
-      disabled={isLoading || loading}
-    >
-      {isLoading ? 'Executing...' : action.label}
-    </button>
+    <div className="action-btn-wrap">
+      <div className="action-btn-row">
+        {disabled ? (
+          <button className={`${styleClass} action-btn-disabled`} disabled title={disabledReason}>
+            {action.label}
+          </button>
+        ) : (
+          <button
+            className={styleClass}
+            onClick={handlePrimaryClick}
+            disabled={isLoading || loading}
+          >
+            {isLoading ? 'Executing...' : action.label}
+          </button>
+        )}
+        {preview && (
+          <button
+            type="button"
+            className={`action-cmd-toggle ${showCmd ? 'active' : ''}`}
+            onClick={() => setShowCmd((v) => !v)}
+            title="What does this run?"
+            aria-label="Show command"
+            aria-expanded={showCmd}
+          >
+            <Info size={13} />
+          </button>
+        )}
+        {marker && (
+          <span
+            className={`action-marker ${marker.success ? 'action-marker-success' : 'action-marker-fail'}`}
+            title={`${marker.label} — ${marker.success ? 'succeeded' : 'failed'} ${formatWhen(marker.timestamp)}`}
+          >
+            {marker.success ? <Check size={12} /> : <AlertTriangle size={12} />}
+            {marker.success ? marker.label : `${marker.label} failed`}
+          </span>
+        )}
+      </div>
+      {showCmd && preview && (
+        <div className="action-cmd-preview">
+          <span className="action-cmd-kind">{commandKind(action.command)}</span>
+          <code>{preview}</code>
+        </div>
+      )}
+      {disabled && disabledReason && (
+        <div className="action-btn-hint">{disabledReason}</div>
+      )}
+    </div>
   );
+}
+
+/** Compact absolute-ish time for chips/tooltips (local time, HH:MM). */
+function formatWhen(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return iso;
+  }
 }

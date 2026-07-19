@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Trash2, X, Edit3, Pin, PinOff, Search, Download, Eye } from 'lucide-react';
-import type { Entry } from '../types';
+import { Trash2, X, Edit3, Pin, PinOff, Search, Download, Eye, History } from 'lucide-react';
+import type { Entry, ActionEvent } from '../types';
 import type { UndoItem } from './UndoToast';
 import { BlockRenderer } from './content-blocks/BlockRenderer';
 import { ActionButton } from './ActionButton';
+import { ActivityPanel } from './ActivityPanel';
 import { EntryEditor } from './EntryEditor';
 import { EntryErrorBoundary } from './EntryErrorBoundary';
 import { BlockShell } from './BlockShell';
@@ -11,6 +12,7 @@ import { EntrySearch } from './EntrySearch';
 import { api } from '../api/client';
 import { createUndoItem } from './UndoToast';
 import { useBlockUiState } from '../hooks/useBlockUiState';
+import { deriveMarkers } from '../utils/markers';
 import { entryToMarkdown, entryToHtml, downloadFile } from '../utils/exportEntry';
 
 interface Props {
@@ -38,16 +40,36 @@ export function EntryDetail({
   const [editing, setEditing] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [history, setHistory] = useState<ActionEvent[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const { pinned, hidden, togglePinned, toggleHidden, unhideAll } = useBlockUiState(entry.id);
+
+  // Outcome markers derived from the audit history (generic: any action's
+  // label/style becomes a per-target status chip once it has run).
+  const markers = useMemo(() => deriveMarkers(history), [history]);
+
+  const reloadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      setHistory(await api.getEntryHistory(entry.id));
+    } catch (err) {
+      console.error('Failed to load activity:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [entry.id]);
 
   useEffect(() => {
     setActionResult(null);
     setEditing(false);
     setSearchOpen(false);
     setExportMenuOpen(false);
-  }, [entry.id]);
+    setActivityOpen(false);
+    void reloadHistory();
+  }, [entry.id, reloadHistory]);
 
   // Deep-link anchor (#block-N): scroll once after first render.
   useEffect(() => {
@@ -69,6 +91,7 @@ export function EntryDetail({
       const action = entry.actions[actionIndex];
       const result = await api.executeAction(entry.id, actionIndex, parameters);
       setActionResult({ success: result.success, message: result.message ?? '' });
+      void reloadHistory();
       if (result.success) {
         if (action.undoCommand && onUndoCreated) {
           const windowSec = action.undoWindowSeconds ?? defaultUndoWindow;
@@ -78,19 +101,22 @@ export function EntryDetail({
       }
     } catch (err) {
       setActionResult({ success: false, message: String(err) });
+      void reloadHistory();
       throw err;
     }
-  }, [entry, onActionExecuted, onUndoCreated, defaultUndoWindow]);
+  }, [entry, onActionExecuted, onUndoCreated, defaultUndoWindow, reloadHistory]);
 
-  const handleSectionAction = useCallback(async (sectionIndex: number, actionIndex: number, parameters?: Record<string, string>) => {
+  const handleBlockAction = useCallback(async (path: number[], actionIndex: number, parameters?: Record<string, string>) => {
     try {
-      const result = await api.executeSectionAction(entry.id, sectionIndex, actionIndex, parameters);
+      const result = await api.executeSectionAction(entry.id, path, actionIndex, parameters);
       setActionResult({ success: result.success, message: result.message ?? '' });
+      void reloadHistory();
     } catch (err) {
       setActionResult({ success: false, message: String(err) });
+      void reloadHistory();
       throw err;
     }
-  }, [entry.id]);
+  }, [entry.id, reloadHistory]);
 
   const handleDismiss = useCallback(async () => {
     try { await api.dismissEntry(entry.id); onDismiss(entry.id); }
@@ -142,17 +168,6 @@ export function EntryDetail({
     return [...pinnedItems, ...others];
   }, [entry.content, pinned]);
 
-  // Track section indices using the original index order so section actions
-  // still match the server's "Nth section block among top-level content".
-  const sectionIndexByOrigIndex = useMemo(() => {
-    const map = new Map<number, number>();
-    let counter = 0;
-    entry.content.forEach((block, i) => {
-      if (block.type === 'section') { map.set(i, counter++); }
-    });
-    return map;
-  }, [entry.content]);
-
   if (editing) {
     return (
       <div className="entry-detail">
@@ -178,6 +193,15 @@ export function EntryDetail({
               aria-label="Find in entry"
             >
               <Search size={16} />
+            </button>
+            <button
+              className={`icon-btn ${activityOpen ? 'active' : ''}`}
+              onClick={() => setActivityOpen((v) => !v)}
+              title="Activity / action history"
+              aria-label="Activity"
+            >
+              <History size={16} />
+              {history.length > 0 && <span className="icon-btn-count">{history.length}</span>}
             </button>
             <div className="export-menu-wrap">
               <button
@@ -262,15 +286,28 @@ export function EntryDetail({
                 <BlockRenderer
                   block={block}
                   entryId={entry.id}
-                  sectionIndex={sectionIndexByOrigIndex.get(origIndex)}
+                  path={[origIndex]}
                   blockKey={blockKey}
-                  onSectionAction={handleSectionAction}
+                  onBlockAction={handleBlockAction}
+                  markers={markers}
                 />
               </EntryErrorBoundary>
             </BlockShell>
           );
         })}
       </div>
+
+      {activityOpen && (
+        <div className="entry-activity">
+          <div className="entry-activity-head">
+            <span><History size={14} /> Activity</span>
+            <button className="close-result" onClick={() => setActivityOpen(false)} aria-label="Close activity">
+              <X size={14} />
+            </button>
+          </div>
+          <ActivityPanel events={history} loading={historyLoading} />
+        </div>
+      )}
 
       {actionResult && (
         <div className={`action-result ${actionResult.success ? 'success' : 'error'}`}>
@@ -288,6 +325,7 @@ export function EntryDetail({
               key={i}
               action={action}
               draftKey={`${entry.id}.${i}`}
+              marker={markers.byEntryAction.get(action.label)}
               onClick={(parameters) => handleAction(i, parameters)}
             />
           ))}

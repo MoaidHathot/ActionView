@@ -1,6 +1,7 @@
 import type {
   Entry, ActionExecutionResult, DashboardStats, EntryUpdateRequest,
   BatchResult, EntryTemplate, EntryFilters, SavedView, SortOption, ClientConfig, ViewCounts,
+  ActionEvent,
 } from '../types';
 
 const API_BASE = '/api';
@@ -61,16 +62,22 @@ export const api = {
 
   executeSectionAction: (
     entryId: string,
-    sectionIndex: number,
+    blockPath: number[],
     actionIndex: number,
     parameters?: Record<string, string>,
   ) =>
     fetchJson<ActionExecutionResult>(
-      `${API_BASE}/entries/${entryId}/sections/${sectionIndex}/actions/${actionIndex}`,
+      `${API_BASE}/entries/${entryId}/blocks/${blockPath.join('.')}/actions/${actionIndex}`,
       {
         method: 'POST',
         body: parameters ? JSON.stringify({ parameters }) : undefined,
       },
+    ),
+
+  // Per-entry action history (audit log). Survives archive/dismiss/delete.
+  getEntryHistory: (entryId: string, limit?: number) =>
+    fetchJson<ActionEvent[]>(
+      `${API_BASE}/entries/${entryId}/history${limit ? `?limit=${limit}` : ''}`,
     ),
 
   dismissEntry: (id: string) =>

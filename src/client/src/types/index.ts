@@ -114,6 +114,7 @@ export interface ChartSeries {
 
 export interface ContentBlock {
   type: ContentBlockType | string;
+  id?: string;
   label?: string;
   body?: unknown;
 
@@ -252,6 +253,39 @@ export interface ActionExecutionResult {
   message?: string;
   statusCode?: number;
   output?: string;
+}
+
+/** Redacted summary of an action's command (never carries headers/body/secrets). */
+export interface ActionCommandInfo {
+  type: 'cli' | 'http';
+  program?: string;
+  args?: string[];
+  method?: string;
+  url?: string;
+}
+
+/**
+ * One append-only audit record of an action execution or lifecycle event.
+ * Mirrors the C# ActionEvent. Fetched from GET /api/entries/{id}/history and
+ * used both for the Activity log and to derive per-target outcome markers.
+ */
+export interface ActionEvent {
+  id: string;
+  timestamp: string;
+  entryId: string;
+  entryTitle?: string;
+  actionLabel: string;
+  actionStyle: ActionStyle;
+  target: 'entry' | 'section' | 'system';
+  path?: number[];
+  targetId?: string;
+  trigger: string;
+  command?: ActionCommandInfo;
+  success: boolean;
+  statusCode?: number;
+  message?: string;
+  output?: string;
+  postBehavior?: PostActionBehavior;
 }
 
 export interface EntryUpdateRequest {

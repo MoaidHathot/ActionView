@@ -150,7 +150,7 @@ public static class EntryEndpoints
         // --- Execute entry action ---
         group.MapPost("/{id}/actions/{actionIndex:int}",
             async (string id, int actionIndex, ActionExecutionRequest? request,
-                   EntryStore store, ActionExecutor executor,
+                   EntryStore store, ActionExecutor executor, ActionAuditLog audit,
                    IHubContext<EntryHub, IEntryHubClient> hubContext) =>
         {
             var entry = store.GetEntry(id);
@@ -166,6 +166,9 @@ public static class EntryEndpoints
                 return Results.BadRequest(new { error = "Invalid parameters", details = errors });
 
             var result = await executor.ExecuteAsync(action.Command, parameters);
+
+            var post = result.Success ? action.OnSuccess : (PostActionBehavior?)null;
+            audit.Append(BuildActionEvent(entry, action, "entry", path: null, targetId: null, trigger: "click", result, post));
 
             if (result.Success)
             {
@@ -195,23 +198,29 @@ public static class EntryEndpoints
             return Results.Ok(result);
         });
 
-        // --- Execute section action ---
-        group.MapPost("/{entryId}/sections/{sectionIndex:int}/actions/{actionIndex:int}",
-            async (string entryId, int sectionIndex, int actionIndex, ActionExecutionRequest? request,
-                   EntryStore store, ActionExecutor executor) =>
+        // --- Execute a block/section action addressed by positional path ---
+        // Path is a dot-delimited list of indices into the content/children tree
+        // (e.g. "3.0" = entry.Content[3].Children[0]). This replaces the old
+        // top-level-only sectionIndex scheme so actions on NESTED sections
+        // (e.g. per-comment Approve/Delete inside a "Review Comments" section)
+        // actually resolve and execute.
+        group.MapPost("/{entryId}/blocks/{path}/actions/{actionIndex:int}",
+            async (string entryId, string path, int actionIndex, ActionExecutionRequest? request,
+                   EntryStore store, ActionExecutor executor, ActionAuditLog audit) =>
         {
             var entry = store.GetEntry(entryId);
             if (entry is null) return Results.NotFound(new { error = "Entry not found" });
 
-            var sections = entry.Content.Where(c => c.Type == ContentBlockType.Section).ToList();
-            if (sectionIndex < 0 || sectionIndex >= sections.Count)
-                return Results.BadRequest(new { error = "Invalid section index" });
+            var indices = BlockPath.Parse(path);
+            if (indices is null) return Results.BadRequest(new { error = "Invalid block path" });
 
-            var section = sections[sectionIndex];
-            if (section.Actions is null || actionIndex < 0 || actionIndex >= section.Actions.Count)
+            var block = BlockPath.Resolve(entry, indices);
+            if (block is null) return Results.BadRequest(new { error = "Block not found for path" });
+
+            if (block.Actions is null || actionIndex < 0 || actionIndex >= block.Actions.Count)
                 return Results.BadRequest(new { error = "Invalid action index" });
 
-            var action = section.Actions[actionIndex];
+            var action = block.Actions[actionIndex];
 
             var (errors, parameters) = ActionParameterValidator.Validate(action.Parameters, request?.Parameters);
             if (errors.Count > 0)
@@ -219,8 +228,16 @@ public static class EntryEndpoints
 
             var result = await executor.ExecuteAsync(action.Command, parameters);
 
+            audit.Append(BuildActionEvent(entry, action, "section", indices, block.Id, trigger: "click", result, post: null));
+
             return Results.Ok(result);
         });
+
+        // --- Per-entry action history (audit log) ---
+        // Survives archive/dismiss/delete: the log is keyed by entry id and is
+        // never pruned when the entry moves or is removed.
+        group.MapGet("/{id}/history", (string id, ActionAuditLog audit, int? limit) =>
+            Results.Ok(audit.GetForEntry(id, limit ?? 200)));
 
         // --- Pin/unpin entry ---
         group.MapPost("/{id}/pin",
@@ -236,7 +253,7 @@ public static class EntryEndpoints
         // --- Undo action (unarchive) ---
         group.MapPost("/{id}/undo",
             async (string id, ActionExecutionRequest? request,
-                   EntryStore store, ActionExecutor executor,
+                   EntryStore store, ActionExecutor executor, ActionAuditLog audit,
                    IHubContext<EntryHub, IEntryHubClient> hubContext) =>
         {
             // Try to find the archived entry to get the undo command info
@@ -261,6 +278,20 @@ public static class EntryEndpoints
                     return Results.BadRequest(new { error = "Invalid parameters", details = errors });
 
                 var undoResult = await executor.ExecuteAsync(undoCommand, parameters);
+                audit.Append(new ActionEvent
+                {
+                    EntryId = id,
+                    EntryTitle = archivedEntry.Title,
+                    ActionLabel = $"Undo: {action?.Label ?? archivedEntry.Outcome?.Action ?? "action"}",
+                    ActionStyle = action?.Style ?? ActionStyle.Default,
+                    Target = "system",
+                    Trigger = "undo",
+                    Command = ActionCommandInfo.From(undoCommand),
+                    Success = undoResult.Success,
+                    StatusCode = undoResult.StatusCode,
+                    Message = undoResult.Message,
+                    Output = undoResult.Output,
+                });
                 if (!undoResult.Success)
                     return Results.BadRequest(new { error = "Undo command failed", message = undoResult.Message });
             }
@@ -275,7 +306,8 @@ public static class EntryEndpoints
 
         // --- Dismiss entry ---
         group.MapPost("/{id}/dismiss",
-            async (string id, EntryStore store, IHubContext<EntryHub, IEntryHubClient> hubContext) =>
+            async (string id, EntryStore store, ActionAuditLog audit,
+                   IHubContext<EntryHub, IEntryHubClient> hubContext) =>
         {
             var entry = store.ArchiveEntry(id, new EntryOutcome
             {
@@ -286,13 +318,14 @@ public static class EntryEndpoints
 
             if (entry is null) return Results.NotFound();
 
+            audit.Append(SystemEvent(entry, "Dismissed", "dismiss", PostActionBehavior.Archive));
             await hubContext.Clients.All.EntryArchived(entry);
             return Results.Ok(entry);
         });
 
         // --- Batch dismiss ---
         group.MapPost("/batch/dismiss",
-            async (BatchIdsRequest request, EntryStore store,
+            async (BatchIdsRequest request, EntryStore store, ActionAuditLog audit,
                    IHubContext<EntryHub, IEntryHubClient> hubContext) =>
         {
             var dismissed = 0;
@@ -306,6 +339,7 @@ public static class EntryEndpoints
                 });
                 if (entry is not null)
                 {
+                    audit.Append(SystemEvent(entry, "Dismissed", "batch", PostActionBehavior.Archive));
                     await hubContext.Clients.All.EntryArchived(entry);
                     dismissed++;
                 }
@@ -315,14 +349,16 @@ public static class EntryEndpoints
 
         // --- Batch delete ---
         group.MapPost("/batch/delete",
-            async (BatchIdsRequest request, EntryStore store,
+            async (BatchIdsRequest request, EntryStore store, ActionAuditLog audit,
                    IHubContext<EntryHub, IEntryHubClient> hubContext) =>
         {
             var deleted = 0;
             foreach (var id in request.Ids)
             {
+                var entry = store.GetEntry(id);
                 if (store.DeleteEntry(id))
                 {
+                    audit.Append(SystemEvent(entry, "Deleted", "batch", PostActionBehavior.Delete, entryId: id));
                     await hubContext.Clients.All.EntryDeleted(id);
                     deleted++;
                 }
@@ -332,7 +368,7 @@ public static class EntryEndpoints
 
         // --- Batch action (execute same-named action on multiple entries) ---
         group.MapPost("/batch/action",
-            async (BatchActionRequest request, EntryStore store, ActionExecutor executor,
+            async (BatchActionRequest request, EntryStore store, ActionExecutor executor, ActionAuditLog audit,
                    IHubContext<EntryHub, IEntryHubClient> hubContext) =>
         {
             var succeeded = 0;
@@ -343,14 +379,18 @@ public static class EntryEndpoints
                 var entry = store.GetEntry(id);
                 if (entry is null) { failed++; continue; }
 
-                var action = entry.Actions.FirstOrDefault(a =>
+                var actionIdx = entry.Actions.FindIndex(a =>
                     a.Label.Equals(request.ActionLabel, StringComparison.OrdinalIgnoreCase));
-                if (action is null) { failed++; continue; }
+                if (actionIdx < 0) { failed++; continue; }
+                var action = entry.Actions[actionIdx];
 
                 var (errors, parameters) = ActionParameterValidator.Validate(action.Parameters, request.Parameters);
                 if (errors.Count > 0) { failed++; continue; }
 
                 var result = await executor.ExecuteAsync(action.Command, parameters);
+                var post = result.Success ? action.OnSuccess : (PostActionBehavior?)null;
+                audit.Append(BuildActionEvent(entry, action, "entry", path: null, targetId: null, trigger: "batch", result, post));
+
                 if (result.Success)
                 {
                     switch (action.OnSuccess)
@@ -385,11 +425,14 @@ public static class EntryEndpoints
 
         // --- Delete single entry ---
         group.MapDelete("/{id}",
-            async (string id, EntryStore store, IHubContext<EntryHub, IEntryHubClient> hubContext) =>
+            async (string id, EntryStore store, ActionAuditLog audit,
+                   IHubContext<EntryHub, IEntryHubClient> hubContext) =>
         {
+            var entry = store.GetEntry(id);
             var deleted = store.DeleteEntry(id);
             if (!deleted) return Results.NotFound();
 
+            audit.Append(SystemEvent(entry, "Deleted", "click", PostActionBehavior.Delete, entryId: id));
             await hubContext.Clients.All.EntryDeleted(id);
             return Results.NoContent();
         });
@@ -444,6 +487,41 @@ public static class EntryEndpoints
             return registry.Remove(type) ? Results.NoContent() : Results.NotFound();
         });
     }
+
+    // --- Audit + block-path helpers ---
+
+    private static ActionEvent BuildActionEvent(
+        Entry entry, EntryAction action, string target, List<int>? path, string? targetId,
+        string trigger, ActionExecutionResult result, PostActionBehavior? post) => new()
+    {
+        EntryId = entry.Id,
+        EntryTitle = entry.Title,
+        ActionLabel = action.Label,
+        ActionStyle = action.Style,
+        Target = target,
+        Path = path,
+        TargetId = targetId,
+        Trigger = trigger,
+        Command = ActionCommandInfo.From(action.Command),
+        Success = result.Success,
+        StatusCode = result.StatusCode,
+        Message = result.Message,
+        Output = result.Output,
+        PostBehavior = post,
+    };
+
+    private static ActionEvent SystemEvent(
+        Entry? entry, string label, string trigger, PostActionBehavior? post, string? entryId = null) => new()
+    {
+        EntryId = entry?.Id ?? entryId ?? string.Empty,
+        EntryTitle = entry?.Title,
+        ActionLabel = label,
+        ActionStyle = ActionStyle.Default,
+        Target = "system",
+        Trigger = trigger,
+        Success = true,
+        PostBehavior = post,
+    };
 }
 
 // --- Request DTOs ---

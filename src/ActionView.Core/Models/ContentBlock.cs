@@ -18,6 +18,15 @@ public sealed class ContentBlock
     /// <summary>Block type that determines how this block is rendered.</summary>
     public required ContentBlockType Type { get; set; }
 
+    /// <summary>
+    /// Optional stable identifier for this block. When set, it is used as the
+    /// target key for action outcome markers (so a marker survives block
+    /// reordering); otherwise the block's positional path is used. Producers
+    /// that want durable per-target state (e.g. a PR comment's draft id) should
+    /// set this.
+    /// </summary>
+    public string? Id { get; set; }
+
     /// <summary>Optional label/heading for the block.</summary>
     public string? Label { get; set; }
 

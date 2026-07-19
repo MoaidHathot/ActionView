@@ -72,6 +72,8 @@ builder.Services.AddHttpClient<ActionExecutor>();
 builder.Services.AddSingleton<ToastNotifier>();
 builder.Services.AddSingleton<ViewStore>();
 builder.Services.AddSingleton<ConfigWatcher>();
+builder.Services.AddSingleton(sp =>
+    new ActionAuditLog(config.DataDirectory, sp.GetRequiredService<ILogger<ActionAuditLog>>()));
 
 // SignalR
 builder.Services.AddSignalR().AddJsonProtocol(options =>
