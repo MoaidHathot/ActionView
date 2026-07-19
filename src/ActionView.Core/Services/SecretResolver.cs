@@ -13,11 +13,11 @@ namespace ActionView.Core.Services;
 /// </summary>
 public sealed partial class SecretResolver
 {
-    private readonly Dictionary<string, string> _secrets;
+    private readonly AppConfig _config;
 
     public SecretResolver(AppConfig config)
     {
-        _secrets = config.Secrets;
+        _config = config;
     }
 
     /// <summary>
@@ -34,8 +34,10 @@ public sealed partial class SecretResolver
 
     private string? ResolveVariable(string name)
     {
-        // Check config secrets first
-        if (_secrets.TryGetValue(name, out var secretValue))
+        // Check config secrets first. Read live from the config object so that a
+        // hot-reload of actionview.json (see ConfigWatcher) takes effect without
+        // rebuilding this singleton.
+        if (_config.Secrets.TryGetValue(name, out var secretValue))
         {
             if (secretValue.StartsWith("env:", StringComparison.OrdinalIgnoreCase))
             {

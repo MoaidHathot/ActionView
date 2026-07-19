@@ -7,6 +7,7 @@ interface SignalRCallbacks {
   onEntryUpdated?: (entry: Entry) => void;
   onEntryArchived?: (entry: Entry) => void;
   onEntryDeleted?: (entryId: string) => void;
+  onConfigChanged?: () => void;
   onReconnected?: () => void;
 }
 
@@ -52,6 +53,10 @@ export function useSignalR(callbacks: SignalRCallbacks) {
 
     connection.on('EntryDeleted', (entryId: string) => {
       callbacksRef.current.onEntryDeleted?.(entryId);
+    });
+
+    connection.on('ConfigChanged', () => {
+      callbacksRef.current.onConfigChanged?.();
     });
 
     connection.onreconnected(() => {

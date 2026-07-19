@@ -29,4 +29,11 @@ public interface IEntryHubClient
     Task EntryUpdated(Entry entry);
     Task EntryArchived(Entry entry);
     Task EntryDeleted(string entryId);
+
+    /// <summary>
+    /// Signals that the server hot-reloaded runtime-safe config slices
+    /// (views / tag-match default / notifications / secrets) from
+    /// actionview.json. Clients re-fetch the slices they mirror (views + config).
+    /// </summary>
+    Task ConfigChanged();
 }

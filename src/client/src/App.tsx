@@ -35,7 +35,7 @@ export default function App() {
   const [sort, setSort] = useState<SortOption>({ field: 'default', direction: 'desc' });
   const [clientConfig, setClientConfig] = useState<ClientConfig | null>(null);
   const [viewCounts, setViewCounts] = useState<ViewCounts | null>(null);
-  const { views, createView, deleteView, replaceViews } = useViews();
+  const { views, createView, deleteView, replaceViews, reloadViews } = useViews();
   const { toasts, addToast, dismissToast } = useToasts();
   const { theme, toggle: toggleTheme } = useTheme();
 
@@ -135,6 +135,14 @@ export default function App() {
       if (selectedEntry?.id === updatedEntry.id) {
         setSelectedEntry(updatedEntry);
       }
+    },
+    onConfigChanged: () => {
+      // actionview.json was hot-reloaded server-side. Re-fetch the slices the
+      // dashboard mirrors: saved views, the client config (tag-match default),
+      // and per-view counts.
+      void reloadViews();
+      api.getConfig().then(setClientConfig).catch(() => {});
+      api.getViewCounts().then(setViewCounts).catch(() => {});
     },
     onReconnected: () => {
       loadEntries();

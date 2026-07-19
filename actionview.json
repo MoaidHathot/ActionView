@@ -1,5 +1,6 @@
 {
   "dataDirectory": "data",
+  "watchConfig": true,
   "notifications": {
     "enabled": true,
     "palantir": {

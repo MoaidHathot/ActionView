@@ -66,6 +66,23 @@ public sealed partial class ViewStore
         }
     }
 
+    /// <summary>
+    /// Updates the in-memory views from an external source (a config hot-reload)
+    /// WITHOUT writing back to disk. Input is normalized the same way
+    /// <see cref="SaveViews"/> normalizes, so ids/tags stay consistent and a
+    /// subsequent self-write comparison remains stable. Returns the normalized
+    /// list so the caller can detect whether anything actually changed.
+    /// </summary>
+    internal List<SavedView> SetViewsFromReload(IEnumerable<SavedView> views)
+    {
+        var normalized = Normalize(views);
+        lock (_lock)
+        {
+            _config.Views = normalized;
+            return normalized;
+        }
+    }
+
     private void Persist(List<SavedView> views)
     {
         var path = _config.SourcePath
@@ -105,7 +122,7 @@ public sealed partial class ViewStore
         _logger.LogInformation("Persisted {Count} view(s) to {Path}.", views.Count, path);
     }
 
-    private static List<SavedView> Normalize(IEnumerable<SavedView> views)
+    internal static List<SavedView> Normalize(IEnumerable<SavedView> views)
     {
         var result = new List<SavedView>();
         var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

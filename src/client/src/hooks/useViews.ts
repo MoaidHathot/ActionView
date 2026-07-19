@@ -25,6 +25,16 @@ export function useViews() {
       .catch((err) => console.error('Failed to load views:', err));
   }, []);
 
+  // Re-fetch views from the server. Used on config hot-reload (SignalR
+  // ConfigChanged) so an external edit to actionview.json shows up live.
+  const reloadViews = useCallback(async () => {
+    try {
+      setViews(await api.getViews());
+    } catch (err) {
+      console.error('Failed to reload views:', err);
+    }
+  }, []);
+
   const createView = useCallback(
     async (partial: NewView): Promise<SavedView | undefined> => {
       const draft: SavedView = {
@@ -74,7 +84,7 @@ export function useViews() {
     }
   }, []);
 
-  return { views, createView, deleteView, replaceViews };
+  return { views, createView, deleteView, replaceViews, reloadViews };
 }
 
 /**

@@ -71,6 +71,7 @@ builder.Services.AddSingleton<ActionExecutor>();
 builder.Services.AddHttpClient<ActionExecutor>();
 builder.Services.AddSingleton<ToastNotifier>();
 builder.Services.AddSingleton<ViewStore>();
+builder.Services.AddSingleton<ConfigWatcher>();
 
 // SignalR
 builder.Services.AddSignalR().AddJsonProtocol(options =>
@@ -181,12 +182,24 @@ if (config.Templates.ExternalDirectory is not null)
 entryStore.StartWatchingActive();
 inboxWatcher.Start();
 
+// Watch actionview.json for external edits and hot-reload the runtime-safe
+// slices (views / tag-match / notifications / secrets). Push to dashboards so
+// they re-fetch. Gated by config.WatchConfig (default true).
+ConfigWatcher? configWatcher = null;
+if (config.WatchConfig)
+{
+    configWatcher = app.Services.GetRequiredService<ConfigWatcher>();
+    configWatcher.ConfigChanged += () => _ = hubContext.Clients.All.ConfigChanged();
+    configWatcher.StartWatching();
+}
+
 app.Lifetime.ApplicationStopping.Register(() =>
 {
     inboxWatcher.Stop();
     inboxWatcher.Dispose();
     templateRegistry.Dispose();
     entryStore.Dispose();
+    configWatcher?.Dispose();
 });
 
 app.Run(listenUrl);

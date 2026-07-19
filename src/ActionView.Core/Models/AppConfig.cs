@@ -68,6 +68,17 @@ public sealed class AppConfig
     public string ListenUrl { get; set; } = DefaultListenUrl;
 
     /// <summary>
+    /// When true (default), the API host watches the source actionview.json for
+    /// external edits and hot-reloads the runtime-safe slices of config
+    /// (<see cref="Views"/>, <see cref="TagMatchMode"/>, <see cref="Notifications"/>,
+    /// <see cref="Secrets"/>) without a restart. Startup-bound settings
+    /// (DataDirectory, Templates, Ingest, FileAccess, ListenUrl) are never
+    /// hot-reloaded. This flag is read once at startup and cannot itself be
+    /// hot-reloaded.
+    /// </summary>
+    public bool WatchConfig { get; set; } = true;
+
+    /// <summary>
     /// Absolute path to the actionview.json this config was loaded from, captured
     /// by <see cref="Services.ConfigLoader"/>. Null when no config file was found
     /// (defaults in use). Used by the views write-back path to update the same
