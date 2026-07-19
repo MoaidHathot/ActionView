@@ -96,6 +96,14 @@
           "type": "string",
           "description": "Block type that determines rendering. Built-in types: markdown, code, json, table, keyValue, link, section, divider, alert, image, diff, video, gallery, timeline, tabs, stat, file, chart, diagram, beforeAfter. Custom types are rendered by plugins."
         },
+        "id": {
+          "type": "string",
+          "description": "Optional stable identifier for the block. Used as the target key for action outcome markers (survives reordering) and for {{content.ID}} command references. Set it (e.g. a PR comment's draft id) when you want durable per-block state."
+        },
+        "editable": {
+          "type": "boolean",
+          "description": "When true, the dashboard shows an inline editor for this block's text. Edits persist to the entry (capturing the original for diff/revert) and can be referenced from action commands via {{content.self}} / {{content.ID}} — so an edited comment flows into the action that uses it."
+        },
         "label": {
           "type": "string",
           "description": "Optional label/heading for the block."
@@ -488,7 +496,7 @@
         },
         "default": {
           "type": "string",
-          "description": "Initial value (e.g. an AI's draft comment). For numeric/boolean fields, the string is parsed."
+          "description": "Initial value (e.g. an AI's draft comment). For numeric/boolean fields, the string is parsed. May itself contain a content reference such as \"{{content.self}}\" to pre-fill the form from a block's (possibly edited) text."
         },
         "options": {
           "type": "array",
@@ -526,24 +534,24 @@
         },
         "url": {
           "type": "string",
-          "description": "Target URL for HTTP requests. May contain {{VAR}} (secrets/env) and {{param.NAME}} (runtime user input) placeholders."
+          "description": "Target URL for HTTP requests. May contain {{param.NAME}} (runtime user input), {{content.self}}/{{content.ID}}/{{entry.FIELD}} (entry data, possibly edited), and {{VAR}} (secrets/env) placeholders. Resolution order: param -> content/entry -> secret."
         },
         "headers": {
           "type": "object",
           "additionalProperties": { "type": "string" },
-          "description": "HTTP headers. Values may contain {{VAR}} and {{param.NAME}} placeholders."
+          "description": "HTTP headers. Values may contain {{param.NAME}}, {{content.*}}/{{entry.*}}, and {{VAR}} placeholders."
         },
         "body": {
-          "description": "HTTP request body. String leaves may contain {{VAR}} and {{param.NAME}} placeholders; values are JSON-escaped on substitution."
+          "description": "HTTP request body. String leaves may contain {{param.NAME}}, {{content.*}}/{{entry.*}}, and {{VAR}} placeholders; values are JSON-escaped on substitution."
         },
         "program": {
           "type": "string",
-          "description": "Program/executable to run for CLI commands."
+          "description": "Program/executable to run for CLI commands. Supports the same placeholders."
         },
         "args": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Arguments for CLI commands."
+          "description": "Arguments for CLI commands. Each arg supports {{param.NAME}}, {{content.*}}/{{entry.*}}, and {{VAR}} placeholders; each is passed as a single argv element (no shell quoting)."
         },
         "workingDirectory": {
           "type": "string",

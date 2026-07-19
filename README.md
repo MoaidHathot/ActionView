@@ -79,7 +79,9 @@ The dashboard provides:
 - **Saved views** -- named filter presets (by tag and/or type) that split the feed into lanes such as Work and Personal. Configure them in `actionview.json` or manage them from the UI (add, rename, change icon/tags, reorder, delete); each pill shows a live count, and an always-present **All** view shows everything.
 - **Filtering & sort** -- filter by type, severity, source, tags (with **Any/All** matching), and free-text search; sort by created/priority/severity/title, ascending or descending. Tags appear on each row and are click-to-filter.
 - **History view** -- archived entries with outcomes, the same saved views / filters / sort, and a paginated **Load more**.
-- **Detail panel** -- rendered content blocks (markdown, code with syntax highlighting, tables, JSON, key-value pairs, alerts, links) and action buttons.
+- **Detail panel** -- rendered content blocks (markdown, code with syntax highlighting, tables, JSON, key-value pairs, alerts, links) and action buttons. Blocks marked `editable` can be edited inline (persisted, with an original/diff view and one-click revert), and each action button shows a command preview and its last-run outcome.
+- **Activity log** -- a per-entry, append-only history of everything that ran against an entry (actions, section approvals, edits, dismiss/delete) with command, exit status, duration, and streamed output. Survives archive/dismiss/delete. Opened from the History icon in the detail panel; also exposed globally at `/api/history/actions`.
+- **Live action progress** -- actions run as background jobs: the button shows a spinner, elapsed timer, streamed output tail, and a **Cancel** button while running, then the success/failure outcome. Long-running commands never block the UI.
 - **Live indicators** -- connection status, unread badges.
 
 ### CLI
@@ -206,12 +208,19 @@ The server exposes these endpoints:
 | `POST` | `/api/entries` | Ingest an entry (raw JSON body). On failure returns `400` with `{ error: "validation_failed", validation: { ok, errors[], warnings[] } }`. |
 | `POST` | `/api/entries/validate` | Validate an entry (raw JSON body) **without** ingesting. Query: `strict`, `includeNormalized`. Returns `{ ok, errors[], warnings[] }`. |
 | `GET` | `/api/entries/{id}` | Get entry detail (marks as viewed) |
-| `POST` | `/api/entries/{id}/actions/{actionIndex}` | Execute an entry action |
-| `POST` | `/api/entries/{entryId}/sections/{sectionIndex}/actions/{actionIndex}` | Execute a section action |
+| `POST` | `/api/entries/{id}/actions/{actionIndex}` | Start an entry action. Runs as a **background job**; returns `202` with the `ActionJob`. Progress/completion arrive over SignalR. |
+| `POST` | `/api/entries/{entryId}/blocks/{path}/actions/{actionIndex}` | Start a block/section action, addressed by a dot-delimited block **path** (e.g. `3.0` = `content[3].content[0]`), so nested-section actions resolve. Also a background job. |
+| `PATCH` | `/api/entries/{entryId}/blocks/{path}` | Edit a block's text (`{ value }`). Persists to the entry, capturing the original on first edit. |
+| `POST` | `/api/entries/{entryId}/blocks/{path}/revert` | Revert an edited block to its captured original. |
+| `GET` | `/api/entries/{id}/history` | Per-entry action/edit audit log (newest first). Survives archive/dismiss/delete. |
+| `GET` | `/api/jobs` | List active (pending/running) action jobs. Query: `entryId`. |
+| `GET` | `/api/jobs/{jobId}` | Get an action job snapshot (status, exit code, output tail). |
+| `POST` | `/api/jobs/{jobId}/cancel` | Cancel a running action job (kills the process tree). |
 | `POST` | `/api/entries/{id}/dismiss` | Dismiss (archive) an entry |
 | `DELETE` | `/api/entries/{id}` | Permanently delete an entry |
 | `GET` | `/api/history` | List archived entries (query: `type`, `severity`, `source`, `tags`, `tagMode`, `search`, `sort`, `dir`, `limit`, `offset`) |
 | `GET` | `/api/history/{id}` | Get archived entry detail |
+| `GET` | `/api/history/actions` | Global action activity feed across all entries (newest first). Query: `limit`. |
 | `GET` | `/api/stats` | Dashboard statistics |
 | `GET` | `/api/views` | List saved views |
 | `PUT` | `/api/views` | Replace the saved views and persist them back to `actionview.json` |
@@ -220,7 +229,7 @@ The server exposes these endpoints:
 | `GET` | `/api/files?path={path}` | Serve a local file referenced by an entry. Gated by `fileAccess.allowedRoots` in `actionview.json`. |
 | `GET` | `/api/entries/{id}/export?format={md\|html\|json}` | Export an entry (active or archived) as Markdown, HTML, or raw JSON for archiving / printing. |
 
-A SignalR hub is available at `/hubs/entries` and broadcasts `EntriesAdded`, `EntryUpdated`, `EntryArchived`, and `EntryDeleted` events.
+A SignalR hub is available at `/hubs/entries` and broadcasts `EntriesAdded`, `EntryUpdated`, `EntryArchived`, `EntryDeleted`, `ConfigChanged` (config hot-reload), and the action-job lifecycle events `ActionJobStarted`, `ActionJobProgress`, and `ActionJobFinished`.
 
 ## Validation
 
@@ -258,9 +267,17 @@ ActionView is configured via a `actionview.json` file:
 ```json
 {
   "dataDirectory": "data",
+  "listenUrl": "http://localhost:5173",
+  "watchConfig": true,
   "tagMatchMode": "any",
+  "undoWindowSeconds": 10,
   "ingest": {
     "strict": false
+  },
+  "actions": {
+    "maxConcurrentJobs": 4,
+    "defaultTimeoutSeconds": 0,
+    "outputTailLines": 200
   },
   "views": [
     { "id": "work", "name": "Work", "icon": "briefcase", "tags": ["work"] },
@@ -286,8 +303,14 @@ ActionView is configured via a `actionview.json` file:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `dataDirectory` | string | `~/.actionview/` | Root directory containing `inbox/`, `active/`, `archive/`, and `errors/` subdirectories. Relative paths are resolved against the config file location. |
+| `listenUrl` | string | `http://localhost:5173` | URL the API host listens on. CLI `--urls`/`--port` override it. |
+| `watchConfig` | bool | `true` | Watch `actionview.json` for external edits and hot-reload the runtime-safe slices (`views`, `tagMatchMode`, `notifications`, `secrets`) without a restart, pushing a `ConfigChanged` event to open dashboards. Startup-bound settings (`dataDirectory`, `fileAccess`, `templates`, `ingest`, `listenUrl`) still require a restart. Read once at startup. |
 | `tagMatchMode` | `"any"` \| `"all"` | `any` | Default combine mode for multi-tag filters: `any` (OR) or `all` (AND). A per-view `tagMatch` and the dashboard's Any/All toggle override it. |
+| `undoWindowSeconds` | int | `10` | Default seconds an action's undo toast stays available. A per-action `undoWindowSeconds` overrides it. |
 | `ingest.strict` | bool | `false` | When true, entries that fail schema validation or produce normalization warnings (e.g. a missing required content block, a disallowed tag) are rejected at ingest and routed to `errors/` with a precise reason, instead of shipping with a logged warning. The non-destructive default preserves ActionView's promise never to silently drop a review item; strict producers opt in per submission (`--strict`, `?strict=true`, `strict:true`), per type (template `strict`), or globally here. |
+| `actions.maxConcurrentJobs` | int | `4` | Maximum action jobs running at once. Excess jobs queue as pending. |
+| `actions.defaultTimeoutSeconds` | int | `0` | Per-job timeout in seconds. When > 0, a job that exceeds it is cancelled (process tree killed) and marked failed. `0` = no timeout. |
+| `actions.outputTailLines` | int | `200` | Maximum streamed output lines retained on a running job (rolling tail). |
 | `views` | object[] | `[]` | Saved filter presets ("views"). Each: `id`, `name`, optional `icon` (Lucide name), `type`, `tags` (string[]), and `tagMatch` (`any`/`all`). Editable from the dashboard, which persists changes back to this file. The built-in **All** view is always present and not stored here. |
 | `notifications.enabled` | bool | `true` | Enable Windows toast notifications when new entries arrive. |
 | `secrets` | object | `{}` | Key-value map of secrets used in action command placeholders. |
@@ -410,6 +433,8 @@ The `content` array accepts these block types:
 | `alert` | Colored banner with markdown body, optional dismiss, and inline actions | `body`, `level`, `dismissible`, `actions` |
 | `divider` | Horizontal rule | (no fields) |
 
+Any block also accepts two optional fields: **`id`** (a stable identifier used for outcome markers and `{{content.ID}}` command references) and **`editable`** (when `true`, the block's text can be edited inline in the dashboard — persisted to the entry, with an original/diff view and one-click revert).
+
 ### Actions
 
 Actions define buttons that execute commands when clicked:
@@ -441,11 +466,19 @@ Actions define buttons that execute commands when clicked:
 | `parameters` | Optional list of inputs the user supplies before the action runs (see below) |
 | `onSuccess` | What to do after successful execution: `archive`, `keep`, or `delete` |
 
-**HTTP commands** support `method`, `url`, `headers`, and `body`. All string values support `{{VAR}}` (secrets/env) and `{{param.NAME}}` (runtime user input) placeholder substitution.
+**HTTP commands** support `method`, `url`, `headers`, and `body`. All string values support placeholder substitution (see below).
 
 **CLI commands** support `program`, `args` (string array), and `workingDirectory`.
 
 Actions can also be placed inside `section` blocks to scope them to a specific part of the entry.
+
+**Command placeholders** (resolved in this order):
+
+1. `{{param.NAME}}` — runtime user input from the action's `parameters` form.
+2. `{{content.self}}` / `{{content.ID}}` / `{{entry.FIELD}}` — data pulled from the entry itself at execution time. `content.self` is the block that owns a section action; `content.ID` targets a block by its `id`; `entry.FIELD` is one of `title`, `subtitle`, `type`, `id`, `source`, `severity`, `tags`. Because inline edits persist to the entry, these expand to the **edited** text — so editing a comment then clicking Approve/Submit uses the edited version.
+3. `{{VAR}}` — secrets from `actionview.json`'s `secrets` map (or an environment variable).
+
+**Actions run as background jobs.** Clicking an action returns immediately; the command runs server-side while the button shows live progress (spinner, elapsed timer, streamed output, Cancel). On success the entry follows `onSuccess` (archive/keep/delete). Every run is recorded in the entry's activity log with its command, exit code, duration, and output.
 
 #### Parameterized Actions
 
@@ -491,7 +524,8 @@ When `parameters` is present the UI expands an inline form under the button (tex
 
 Substitution rules:
 
-* `{{param.NAME}}` is resolved **before** `{{SECRET}}` so user input cannot collide with secret names.
+* `{{param.NAME}}` is resolved first, then `{{content.*}}`/`{{entry.*}}`, then `{{SECRET}}` — separate namespaces, so user input cannot collide with secret names.
+* A parameter `default` may itself contain a content reference (e.g. `"{{content.self}}"`) to pre-fill the form from a block's current (possibly edited) text without duplicating it.
 * Inside a JSON `body`, substitution happens at the string-leaf level — special characters in user input (quotes, backslashes, newlines) are JSON-escaped automatically and cannot break the payload.
 * Drafts are persisted to `localStorage` per `entry+action`, so a SignalR refresh while you're editing won't wipe your work.
 
