@@ -208,4 +208,91 @@ public class ConfigLoaderTests : IDisposable
             Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", null);
         }
     }
+
+    [Fact]
+    public void Load_WithEnvVarInDataDir_ExpandsAndTreatsAsAbsolute()
+    {
+        var varName = $"ACTIONVIEW_TEST_ROOT_{Guid.NewGuid():N}";
+        var root = Path.Combine(_tempDir, "envroot");
+        Environment.SetEnvironmentVariable(varName, root);
+        try
+        {
+            var configPath = Path.Combine(_tempDir, "env-datadir.json");
+            File.WriteAllText(configPath, $$"""{"dataDirectory": "${{varName}}/data"}""");
+
+            var loaded = ConfigLoader.Load(explicitPath: configPath);
+
+            // Expanded to an absolute path, so it must NOT be combined with the
+            // config directory, and no literal "$VAR" folder may be created.
+            // Compared through GetFullPath because the loader leaves already-absolute
+            // paths verbatim, preserving whichever separator the config used.
+            Assert.Equal(
+                Path.GetFullPath(Path.Combine(root, "data")),
+                Path.GetFullPath(loaded.DataDirectory));
+            Assert.False(Directory.Exists(Path.Combine(_tempDir, $"${varName}")));
+            Assert.True(Directory.Exists(Path.Combine(root, "data", "inbox")));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(varName, null);
+        }
+    }
+
+    [Fact]
+    public void Load_WithEnvVarInExternalTemplatesAndAllowedRoots_Expands()
+    {
+        var varName = $"ACTIONVIEW_TEST_ROOT_{Guid.NewGuid():N}";
+        var root = Path.Combine(_tempDir, "shared");
+        Environment.SetEnvironmentVariable(varName, root);
+        try
+        {
+            var configPath = Path.Combine(_tempDir, "env-paths.json");
+            File.WriteAllText(configPath, $$"""
+                {
+                  "dataDirectory": "data",
+                  "templates": { "externalDirectory": "${{varName}}/templates" },
+                  "fileAccess": { "allowedRoots": ["${{varName}}/images"] }
+                }
+                """);
+
+            var loaded = ConfigLoader.Load(explicitPath: configPath);
+
+            Assert.Equal(
+                Path.GetFullPath(Path.Combine(root, "templates")),
+                Path.GetFullPath(loaded.Templates.ExternalDirectory!));
+            Assert.Equal(
+                Path.GetFullPath(Path.Combine(root, "images")),
+                Assert.Single(loaded.FileAccess.AllowedRoots));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(varName, null);
+        }
+    }
+
+    [Fact]
+    public void Load_WithUnsetEnvVarInDataDir_ThrowsInsteadOfCreatingLiteralDirectory()
+    {
+        var varName = $"ACTIONVIEW_MISSING_{Guid.NewGuid():N}";
+        var configPath = Path.Combine(_tempDir, "missing-var.json");
+        File.WriteAllText(configPath, $$"""{"dataDirectory": "${{varName}}/data"}""");
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => ConfigLoader.Load(explicitPath: configPath));
+
+        Assert.Contains(varName, ex.Message);
+        Assert.False(Directory.Exists(Path.Combine(_tempDir, $"${varName}")));
+    }
+
+    [Fact]
+    public void Load_WithRelativeDataDirContainingDollar_IsNotTreatedAsVariable()
+    {
+        var configPath = Path.Combine(_tempDir, "escaped.json");
+        // "$$" escapes to a single literal '$'.
+        File.WriteAllText(configPath, """{"dataDirectory": "$$literal"}""");
+
+        var loaded = ConfigLoader.Load(explicitPath: configPath);
+
+        Assert.Equal(Path.GetFullPath(Path.Combine(_tempDir, "$literal")), loaded.DataDirectory);
+    }
 }

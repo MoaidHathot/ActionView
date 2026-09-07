@@ -9,7 +9,9 @@ public sealed class AppConfig
 {
     /// <summary>
     /// Root directory for inbox/, active/, archive/, errors/ subdirectories.
-    /// If relative, resolved relative to the config file location.
+    /// Supports <c>$VAR</c> / <c>${VAR}</c> environment-variable references and a
+    /// leading <c>~</c> (see <see cref="Services.PathExpander"/>).
+    /// If still relative after expansion, resolved relative to the config file location.
     /// Defaults to ~/.actionview/ if not specified.
     /// </summary>
     public string DataDirectory { get; set; } = DefaultDataDirectory;
@@ -160,7 +162,9 @@ public sealed class TemplatesConfig
 {
     /// <summary>
     /// External directory to scan for template JSON files on startup.
-    /// If relative, resolved against the config file location.
+    /// Supports <c>$VAR</c> / <c>${VAR}</c> environment-variable references and a
+    /// leading <c>~</c> (see <see cref="Services.PathExpander"/>).
+    /// If still relative after expansion, resolved against the config file location.
     /// Templates found here are auto-registered and tracked via a manifest;
     /// removing a template from this directory will remove it from the registry
     /// on next startup, but templates registered by other means are never touched.
@@ -228,9 +232,11 @@ public sealed class FileAccessConfig
     /// Absolute directory paths whose contents may be served.
     /// A requested path is served only if, after canonicalisation
     /// (full path, link target resolution), it lies underneath one
-    /// of these roots. Paths in this list that are not absolute are
-    /// resolved relative to the config file location, the same way
-    /// <see cref="AppConfig.DataDirectory"/> is resolved.
+    /// of these roots. Entries support <c>$VAR</c> / <c>${VAR}</c>
+    /// environment-variable references and a leading <c>~</c>
+    /// (see <see cref="Services.PathExpander"/>). Paths in this list that are
+    /// not absolute after expansion are resolved relative to the config file
+    /// location, the same way <see cref="AppConfig.DataDirectory"/> is resolved.
     /// </summary>
     public List<string> AllowedRoots { get; set; } = new();
 

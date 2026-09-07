@@ -25,7 +25,14 @@ public sealed class ConfigLoader
     /// 3. $XDG_CONFIG_HOME/actionview/actionview.json
     /// 4. appsettings path (ActionView:ConfigPath)
     /// 5. ./actionview.json in current directory
+    ///
+    /// Path settings (dataDirectory, templates.externalDirectory,
+    /// fileAccess.allowedRoots) go through <see cref="PathExpander"/> first, so
+    /// they may reference environment variables as $VAR / ${VAR} and start with ~.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// A path setting references an environment variable that is not set.
+    /// </exception>
     public static AppConfig Load(string? explicitPath = null, string? appsettingsPath = null)
     {
         var configPath = ResolveConfigPath(explicitPath, appsettingsPath);
@@ -48,11 +55,18 @@ public sealed class ConfigLoader
         // Resolve relative paths against config file location
         var configDir = Path.GetDirectoryName(Path.GetFullPath(configPath))!;
 
+        // Environment variables ($VAR / ${VAR}) and a leading ~ are expanded
+        // before the rooted check: "$OneDrive/actionview" must be recognised as
+        // absolute rather than combined with configDir into a literal "$OneDrive"
+        // folder. See PathExpander for the syntax.
+        config.DataDirectory = PathExpander.Expand(config.DataDirectory, "dataDirectory");
         if (!Path.IsPathRooted(config.DataDirectory))
         {
             config.DataDirectory = Path.GetFullPath(Path.Combine(configDir, config.DataDirectory));
         }
 
+        config.Templates.ExternalDirectory = PathExpander.ExpandOptional(
+            config.Templates.ExternalDirectory, "templates.externalDirectory");
         if (config.Templates.ExternalDirectory is not null
             && !Path.IsPathRooted(config.Templates.ExternalDirectory))
         {
@@ -64,9 +78,10 @@ public sealed class ConfigLoader
         // file location, the same way DataDirectory and ExternalDirectory are.
         // Empty / whitespace entries are dropped.
         var resolvedRoots = new List<string>(config.FileAccess.AllowedRoots.Count);
-        foreach (var root in config.FileAccess.AllowedRoots)
+        foreach (var rawRoot in config.FileAccess.AllowedRoots)
         {
-            if (string.IsNullOrWhiteSpace(root)) continue;
+            if (string.IsNullOrWhiteSpace(rawRoot)) continue;
+            var root = PathExpander.Expand(rawRoot, "fileAccess.allowedRoots");
             var resolved = Path.IsPathRooted(root)
                 ? Path.GetFullPath(root)
                 : Path.GetFullPath(Path.Combine(configDir, root));

@@ -302,7 +302,7 @@ ActionView is configured via a `actionview.json` file:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `dataDirectory` | string | `~/.actionview/` | Root directory containing `inbox/`, `active/`, `archive/`, and `errors/` subdirectories. Relative paths are resolved against the config file location. |
+| `dataDirectory` | string | `~/.actionview/` | Root directory containing `inbox/`, `active/`, `archive/`, and `errors/` subdirectories. Supports [path expansion](#path-expansion). Relative paths are resolved against the config file location. |
 | `listenUrl` | string | `http://localhost:5173` | URL the API host listens on. CLI `--urls`/`--port` override it. |
 | `watchConfig` | bool | `true` | Watch `actionview.json` for external edits and hot-reload the runtime-safe slices (`views`, `tagMatchMode`, `notifications`, `secrets`) without a restart, pushing a `ConfigChanged` event to open dashboards. Startup-bound settings (`dataDirectory`, `fileAccess`, `templates`, `ingest`, `listenUrl`) still require a restart. Read once at startup. |
 | `tagMatchMode` | `"any"` \| `"all"` | `any` | Default combine mode for multi-tag filters: `any` (OR) or `all` (AND). A per-view `tagMatch` and the dashboard's Any/All toggle override it. |
@@ -314,8 +314,33 @@ ActionView is configured via a `actionview.json` file:
 | `views` | object[] | `[]` | Saved filter presets ("views"). Each: `id`, `name`, optional `icon` (Lucide name), `type`, `tags` (string[]), and `tagMatch` (`any`/`all`). Editable from the dashboard, which persists changes back to this file. The built-in **All** view is always present and not stored here. |
 | `notifications.enabled` | bool | `true` | Enable Windows toast notifications when new entries arrive. |
 | `secrets` | object | `{}` | Key-value map of secrets used in action command placeholders. |
-| `fileAccess.allowedRoots` | string[] | `[]` | Absolute (or config-relative) directory paths whose contents `/api/files` is allowed to serve. Required for `file://` image URLs in entries to load. Empty = no local files served. |
+| `fileAccess.allowedRoots` | string[] | `[]` | Absolute (or config-relative) directory paths whose contents `/api/files` is allowed to serve. Supports [path expansion](#path-expansion). Required for `file://` image URLs in entries to load. Empty = no local files served. |
 | `fileAccess.maxFileSizeBytes` | int | `20971520` (20 MiB) | Maximum file size returned by `/api/files`. Larger files return HTTP 413. |
+
+### Path Expansion
+
+The path settings — `dataDirectory`, `templates.externalDirectory`, and each entry in `fileAccess.allowedRoots` — are expanded before they are resolved:
+
+| Syntax | Meaning |
+|--------|---------|
+| `$VAR` | Environment variable. The name runs while characters are letters, digits, or `_`, so `$OneDrive/actionview` works. |
+| `${VAR}` | Braced form, needed when the variable is followed by more name characters: `${OneDrive}Docs`. |
+| `$$` | A literal `$`. |
+| `~` | User profile directory, when it is the first character and is followed by nothing or a separator (`~/.actionview`). |
+
+```json
+{
+  "dataDirectory": "$OneDrive/actionview",
+  "templates": { "externalDirectory": "~/actionview-templates" },
+  "fileAccess": { "allowedRoots": ["${USERPROFILE}/Pictures"] }
+}
+```
+
+Expansion happens *before* the relative-vs-absolute decision, so `$OneDrive/actionview` is correctly recognised as absolute rather than being appended to the config file's directory.
+
+A `$` that does not begin a valid variable name is left alone, so UNC admin shares such as `\\server\C$\logs` are unaffected.
+
+**Referencing a variable that is not set is an error** — startup fails with a message naming the variable and the setting. Config paths drive directory creation, so silently expanding a typo to a wrong-but-plausible path would create a junk tree and hide the mistake. Use `$$` if a `$` is genuinely part of the path.
 
 ### Config File Resolution
 
